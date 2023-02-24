@@ -11,3 +11,9 @@
   description:
     "Lint the project directory for compliance with the REUSE Specification"
   language_version: python3
+- id: reuse-annotate
+  name: reuse-annotate
+  entry: "reuse annotate"
+  language: python
+  description: "Add copyright/license header to files"
+  language_version: python3
