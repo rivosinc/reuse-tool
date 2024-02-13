@@ -42,6 +42,38 @@ CLI command and its behaviour. There are no guarantees of stability for the
 
 ### Added
 
+### Changed
+
+### Deprecated
+
+### Removed
+
+### Fixed
+
+### Security
+
+## 3.0.1 - 2024-01-19
+
+### Fixed
+
+- `.qrc` and `.ui` now have the HTML comment style instead of being marked
+  uncommentable. (#896)
+- This reverts behaviour introduced in v3.0.0: the contents of uncommentable
+  files are scanned for REUSE information again. The contents of binary files
+  are not. (#896)
+
+## 3.0.0 - 2024-01-17
+
+This release contains a lot of small improvements and changes without anything
+big per se. Rather, it is made in advance of a release which will contain a
+single feature: [REUSE.toml](https://github.com/fsfe/reuse-tool/issues/779), a
+replacement for `.reuse/dep5`. `.reuse/dep5` will still be supported as a
+deprecated feature for some time.
+
+That future 3.1 release will have some alpha testing in advance.
+
+### Added
+
 - Implement handling LicenseRef in `download` and `init`. (#697)
 - Declared support for Python 3.12. (#846)
 - More file types are recognised:
@@ -54,6 +86,9 @@ CLI command and its behaviour. There are no guarantees of stability for the
   - Empty placeholders (`.empty`) (#862)
   - ShellCheck configuration (`.shellcheckrc`) (#862)
   - Pylint in-project configuration (`pylintrc`) (#862)
+  - Lisp schemes (`.sld`, `.sls`, `.sps`) (#875)
+- Added comment styles:
+  - `csingle` for Zig (`.zig`) and Hare (`.ha`) (#889)
 - Display recommendations for steps to fix found issues during a lint. (#698)
 - Add support for Pijul VCS. Pijul support is not added to the Docker image.
   (#858)
@@ -83,12 +118,11 @@ CLI command and its behaviour. There are no guarantees of stability for the
 - The `-debian` Docker image is now based off debian:12-slim. It used to be
   based on the python:slim image, which used debian:slim under the hood. (#849)
 
-### Deprecated
-
 ### Removed
 
 - Removed deprecated `--explicit-license`. (#851)
 - Removed deprecated `addheader`. (#851)
+- No longer depend on `sphinx-autodoc-typehints` for documentation. (#772)
 
 ### Fixed
 
@@ -97,8 +131,11 @@ CLI command and its behaviour. There are no guarantees of stability for the
 - Fix issue in `annotate` where `--single-line` and `--multi-line` would not
   correctly raise an error with an incompatible comment style. (#853)
 - Fix parsing existing copyright lines when they do not have a year (#861)
-
-### Security
+- Better handling of Lisp comment styles. Now, any number of ";" characters is
+  recognised as the prefix to a Lisp comment, and ";;;" is used when inserting
+  comment headers, as per
+  <https://www.gnu.org/software/emacs/manual/html_node/elisp/Comment-Tips.html>.
+  (#874)
 
 ## 2.1.0 - 2023-07-18
 
