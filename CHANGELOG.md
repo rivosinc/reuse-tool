@@ -38,19 +38,66 @@ CLI command and its behaviour. There are no guarantees of stability for the
 ### Security
 -->
 
-## Unreleased - YYYY-MM-DD
+## 3.1.0a1 - 2024-05-28
 
 ### Added
 
+- Added support for `REUSE.toml`. (#863)
+- Manpages added for all `reuse` commands. Distribution maintainers might wish
+  to distribute the (Sphinx-built) manpages. (#975)
+- More file types are recognised:
+  - Assembler (`.asm`) (#928)
+  - GraphQL (`.graphqls`, `.gqls`) (#930)
+  - CUDA-C++ (`.cu`, `.cuh`) (#938)
+  - Various .NET files (`.csproj`, `.fsproj`, `.fsx`, `.props`, `.sln`,
+    `.vbproj`) (#940)
+  - Cargo (`Cargo.lock`) (#937)
+  - Clang-Tidy (`.clang-tidy`) (#961)
+  - Java `.properties` files (#968)
+  - Apache HTTP server config `.htaccess` files (#985)
+  - npm `.npmrc` files (#985)
+  - LaTeX class files (`.cls`) (#971)
+- Added comment styles:
+  - `man` for UNIX Man pages (`.man`) (#954)
+- Added `--lines` output option for `lint`. (#956)
+- Treat `% !TEX` and `% !BIB` as shebangs in TeX and BibTeX files, respectively
+  (#971)
+
 ### Changed
+
+- Updated SPDX resources to 3.24.0. (#994)
+- Updated REUSE specification version to 3.2. (#994)
+- `.s` files now use the Python comment style as per GNU Assembler (gas). (#928)
+- Previously, any file that begins with `COPYING` or `LICENSE` was ignored. This
+  has been changed. Now, files like `COPYING_README` are no longer ignored, but
+  `COPYING` and `COPYING.txt` are still ignored (in other words: exact matches,
+  or `COPYING` + a file extension). Idem ditto for `LICENSE`. (#886)
+- Dependencies added:
+  - `attrs>=21.1` (#863)
+  - `tomlkit>=0.8` (#863)
 
 ### Deprecated
 
-### Removed
+- `.reuse/dep5` is marked deprecated. `reuse convert-dep5` will help you switch
+  to `REUSE.toml`. (#863)
 
 ### Fixed
 
-### Security
+- Clearer instructions for `--suppress-deprecation` in deprecation warning.
+  (#949)
+- The datetime value for `Created:` was wrongly formatted since 3.0.0. It now
+  returns a correctly formatted ISO 8601 date again. (#952)
+- Repaired the behaviour of `reuse download` where being inside of a LICENSES/
+  directory should not create a deeper LICENSES/LICENSES/ directory. (#975)
+- Support annotating a file that contains only a shebang. (#965)
+- Add `CONTRIBUTING.md` to the sdist. (#987)
+
+## 3.0.2 - 2024-04-08
+
+### Fixed
+
+- `annotate`'s '`--style` now works again when used for a file with an
+  unrecognised extension. (#909)
 
 ## 3.0.1 - 2024-01-19
 

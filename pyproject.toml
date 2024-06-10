@@ -7,7 +7,7 @@
 
 [tool.poetry]
 name = "reuse"
-version = "3.0.1"
+version = "3.1.0a1"
 description = "reuse is a tool for compliance with the REUSE recommendations."
 authors = [
     "Free Software Foundation Europe <contact@fsfe.org>",
@@ -30,7 +30,9 @@ include = [
     { path = "AUTHORS.rst", format = "sdist" },
     { path = "README.md", format = "sdist" },
     { path = "CHANGELOG.md", format = "sdist" },
+    { path = "CONTRIBUTING.md", format = "sdist" },
     { path = ".reuse", format = "sdist" },
+    { path = "REUSE.toml", format = "sdist" },
     { path = "LICENSES", format = "sdist" },
     { path = "docs", format = "sdist" },
 ]
@@ -51,30 +53,33 @@ classifiers = [
 
 [tool.poetry.dependencies]
 python = "^3.8"
-Jinja2 = "^3.0.0"
-binaryornot = "^0.4.4"
+Jinja2 = ">=3.0.0"
+binaryornot = ">=0.4.4"
 "boolean.py" = ">=3.8"
 license-expression = ">=1.0"
-python-debian = "^0.1.34,!=0.1.45,!=0.1.46,!=0.1.47"
+python-debian = ">=0.1.34,!=0.1.45,!=0.1.46,!=0.1.47"
+tomlkit = ">=0.8"
+attrs = ">=21.1"
 
 [tool.poetry.group.test.dependencies]
 pytest = ">=6.0.0"
 pytest-cov = ">=2.10.0"
+freezegun = ">=1.0.0"
 
 [tool.poetry.group.docs.dependencies]
 Sphinx = ">=4.0.0"
-recommonmark = "^0.7.1"
-sphinxcontrib-apidoc = "^0.3.0"
-furo = "^2023.3.27"
+myst-parser = ">=2.0.0"
+sphinxcontrib-apidoc = ">=0.3.0"
+furo = ">=2023.3.27"
 
 [tool.poetry.group.dev.dependencies]
 black = ">=20"
-isort = "^5.6.0"
-pre-commit = "^2.9.0"
-bump2version = "^1.0.0"
-pylint = "^2.12.2"
-mypy = "^1.0"
-GitPython = "^3.0"
+isort = ">=5.6.0"
+pre-commit = ">=2.9.0"
+bumpver = ">=2023.1129"
+pylint = ">=2.12.2"
+mypy = ">=1.0"
+GitPython = ">=3.0"
 
 [tool.poetry.group.lsp]
 optional = true
@@ -95,6 +100,27 @@ script = "_build.py"
 [build-system]
 requires = ["poetry-core>=1.1.0"]
 build-backend = "poetry.core.masonry.api"
+
+[bumpver]
+current_version = "v3.1.0a1"
+version_pattern = "vMAJOR.MINOR.PATCH[PYTAGNUM]"
+commit_message = "Bump version: {old_version} → {new_version}"
+tag_message = "{new_version}"
+tag_scope = "default"
+pre_commit_hook = ""
+post_commit_hook = ""
+commit = true
+tag = false
+push = false
+
+[bumpver.file_patterns]
+"pyproject.toml" = [
+    '^version = "{pep440_version}"$',
+    '^current_version = "{version}"$',
+]
+"src/reuse/__init__.py" = [
+    '__version__ = "{pep440_version}"$',
+]
 
 [tool.black]
 line-length = 80

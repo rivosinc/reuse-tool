@@ -452,6 +452,31 @@ def test_annotate_specify_style(fake_repository, stringio, mock_date_today):
     assert simple_file.read_text() == expected
 
 
+def test_annotate_specify_style_unrecognised(
+    fake_repository, stringio, mock_date_today
+):
+    """Add a header to a file that is unrecognised."""
+
+    simple_file = fake_repository / "hello.foo"
+    simple_file.touch()
+    expected = "# SPDX-FileCopyrightText: 2018 Jane Doe"
+
+    result = main(
+        [
+            "annotate",
+            "--copyright",
+            "Jane Doe",
+            "--style",
+            "python",
+            "hello.foo",
+        ],
+        out=stringio,
+    )
+
+    assert result == 0
+    assert simple_file.read_text().strip() == expected
+
+
 def test_annotate_implicit_style(fake_repository, stringio, mock_date_today):
     """Add a header to a file that has a recognised extension."""
     simple_file = fake_repository / "foo.js"
@@ -1450,7 +1475,7 @@ def test_annotate_recursive(fake_repository, stringio, mock_date_today):
         out=stringio,
     )
 
-    for path in (fake_repository / "src").glob("src/**"):
+    for path in (fake_repository / "src").rglob("src/**"):
         content = path.read_text()
         assert "SPDX-FileCopyrightText: 2018 Joe Somebody" in content
 

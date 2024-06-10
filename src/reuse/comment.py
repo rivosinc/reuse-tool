@@ -321,6 +321,7 @@ class BibTexCommentStyle(CommentStyle):
     SHORTHAND = "bibtex"
 
     MULTI_LINE = MultiLineSegments("@Comment{", "", "}")
+    SHEBANGS = ["% !BIB", "%!BIB"]
 
 
 class CCommentStyle(CommentStyle):
@@ -525,12 +526,23 @@ class TexCommentStyle(CommentStyle):
 
     SINGLE_LINE = "%"
     INDENT_AFTER_SINGLE = " "
+    SHEBANGS = ["% !TEX", "%!TEX"]
 
 
 class UncommentableCommentStyle(EmptyCommentStyle):
     """A pseudo comment style to indicate that this file is uncommentable. This
     results in an external .license file for binaries and --force-dot-license.
     """
+
+
+class UnixManCommentStyle(CommentStyle):
+    """UNIX manual page comment style."""
+
+    SHORTHAND = "man"
+
+    # In case the below is difficult to read, the comment character is: .\"
+    SINGLE_LINE = r".\""
+    INDENT_AFTER_SINGLE = " "
 
 
 class VelocityCommentStyle(CommentStyle):
@@ -577,6 +589,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".asc": CCommentStyle,
     ".asciidoc": CCommentStyle,
     ".ashx": AspxCommentStyle,
+    ".asm": LispCommentStyle,  # ASM assembler
     ".asmx": AspxCommentStyle,
     ".aspx": AspxCommentStyle,
     ".aux": TexCommentStyle,
@@ -596,6 +609,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".clj": LispCommentStyle,
     ".cljc": LispCommentStyle,
     ".cljs": LispCommentStyle,
+    ".cls": TexCommentStyle,
     ".cmake": PythonCommentStyle,  # TODO: Bracket comments not supported.
     ".code-workspace": CCommentStyle,
     ".coffee": PythonCommentStyle,
@@ -603,7 +617,10 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".cs": CCommentStyle,
     ".csl": HtmlCommentStyle,  # Bibliography (XML based)
     ".css": CssCommentStyle,
+    ".csproj": HtmlCommentStyle,
     ".csv": UncommentableCommentStyle,
+    ".cu": CCommentStyle,
+    ".cuh": CCommentStyle,
     ".cxx": CCommentStyle,
     ".d": CCommentStyle,
     ".dart": CCommentStyle,
@@ -618,6 +635,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".ex": PythonCommentStyle,
     ".exs": PythonCommentStyle,
     ".f": FortranCommentStyle,
+    ".fsproj": HtmlCommentStyle,
     ".f03": ModernFortranCommentStyle,
     ".f08": ModernFortranCommentStyle,
     ".f90": ModernFortranCommentStyle,
@@ -631,11 +649,14 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".ftn": FortranCommentStyle,
     ".fpp": FortranCommentStyle,
     ".fs": CCommentStyle,
+    ".fsx": CCommentStyle,
     ".ftl": FtlCommentStyle,
     ".gemspec": PythonCommentStyle,
     ".go": CCommentStyle,
     ".gradle": CCommentStyle,
     ".graphql": PythonCommentStyle,
+    ".graphqls": PythonCommentStyle,
+    ".gqls": PythonCommentStyle,
     ".groovy": CCommentStyle,
     ".h": CCommentStyle,
     ".ha": CSingleCommentStyle,
@@ -675,6 +696,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".lsp": LispCommentStyle,
     ".lua": HaskellCommentStyle,
     ".m4": M4CommentStyle,
+    ".man": UnixManCommentStyle,
     ".markdown": HtmlCommentStyle,
     ".md": HtmlCommentStyle,
     ".mjs": CCommentStyle,
@@ -713,6 +735,8 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".pptx": UncommentableCommentStyle,
     ".pri": PythonCommentStyle,
     ".pro": PythonCommentStyle,
+    ".props": HtmlCommentStyle,  # MSBuild files
+    ".properties": PythonCommentStyle,
     ".proto": CCommentStyle,
     ".ps1": PythonCommentStyle,  # TODO: Multiline comments
     ".psm1": PythonCommentStyle,  # TODO: Multiline comments
@@ -737,7 +761,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".rs": CCommentStyle,
     ".rss": HtmlCommentStyle,
     ".rst": ReStructedTextCommentStyle,
-    ".s": LispCommentStyle,
+    ".s": PythonCommentStyle,  # Assume GNU Assembler for x86
     ".sass": CssCommentStyle,
     ".sbt": CCommentStyle,
     ".sc": CCommentStyle,  # SuperCollider source file
@@ -751,6 +775,8 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".scsyndef": UncommentableCommentStyle,
     ".sh": PythonCommentStyle,
     ".sld": LispCommentStyle,  # Scheme Library Definition (R7RS)
+    # Visual Studio solution file, officially uncommentable:
+    ".sln": UncommentableCommentStyle,
     ".sls": LispCommentStyle,  # Scheme Library Source (R6RS)
     ".sml": MlCommentStyle,
     ".soy": CCommentStyle,
@@ -775,6 +801,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".ui": HtmlCommentStyle,
     ".v": CCommentStyle,  # V-Lang source code
     ".vala": CCommentStyle,
+    ".vbproj": HtmlCommentStyle,
     ".vim": VimCommentStyle,
     ".vm": VelocityCommentStyle,
     ".vsh": CCommentStyle,  # V-Lang script
@@ -808,6 +835,7 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".bazelrc": PythonCommentStyle,
     ".browserslist": PythonCommentStyle,
     ".clang-format": PythonCommentStyle,
+    ".clang-tidy": PythonCommentStyle,
     ".coveragerc": PythonCommentStyle,
     ".dockerignore": PythonCommentStyle,
     ".editorconfig": PythonCommentStyle,
@@ -817,10 +845,12 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".gitattributes": PythonCommentStyle,
     ".gitignore": PythonCommentStyle,
     ".gitmodules": PythonCommentStyle,
+    ".htaccess": PythonCommentStyle,
     ".mailmap": PythonCommentStyle,
     ".metadata": UncommentableCommentStyle,
     ".mdlrc": PythonCommentStyle,  # Markdown-linter config
     ".npmignore": PythonCommentStyle,
+    ".npmrc": SemicolonCommentStyle,
     ".prettierrc": UncommentableCommentStyle,  # could either be JSON or YAML
     ".prettierignore": PythonCommentStyle,
     ".pylintrc": PythonCommentStyle,
@@ -831,6 +861,7 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".yarnrc": PythonCommentStyle,
     "ansible.cfg": PythonCommentStyle,
     "archive.sctxar": UncommentableCommentStyle,  # SuperCollider global archive
+    "Cargo.lock": UncommentableCommentStyle,
     "CMakeLists.txt": PythonCommentStyle,
     "CODEOWNERS": PythonCommentStyle,
     "configure.ac": M4CommentStyle,
@@ -840,7 +871,6 @@ FILENAME_COMMENT_STYLE_MAP = {
     "Gemfile": PythonCommentStyle,
     "go.mod": CCommentStyle,
     "go.sum": UncommentableCommentStyle,
-    "gradle-wrapper.properties": PythonCommentStyle,
     "gradlew": PythonCommentStyle,
     "Jenkinsfile": CCommentStyle,
     "Makefile.am": PythonCommentStyle,
@@ -855,7 +885,6 @@ FILENAME_COMMENT_STYLE_MAP = {
     "requirements.txt": PythonCommentStyle,
     "ROOT": MlCommentStyle,
     "setup.cfg": PythonCommentStyle,
-    "sonar-project.properties": PythonCommentStyle,
     "yarn.lock": UncommentableCommentStyle,
 }
 

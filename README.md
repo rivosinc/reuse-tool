@@ -29,7 +29,7 @@ recommendations.
 - [Usage](#usage)
 - [Maintainers](#maintainers)
 - [Contributing](#contributing)
-- [License](#license)
+- [Licensing](#licensing)
 
 ## Background
 
@@ -246,7 +246,7 @@ Git. This uses [pre-commit](https://pre-commit.com/). Once you
 ```yaml
 repos:
   - repo: https://github.com/fsfe/reuse-tool
-    rev: v3.0.1
+    rev: v3.0.2
     hooks:
       - id: reuse
 ```
@@ -258,6 +258,9 @@ an error.
 ## Maintainers
 
 - Carmen Bianca Bakker <carmenbianca@fsfe.org>
+
+### Former maintainers
+
 - Max Mehl <max.mehl@fsfe.org>
 - Linus Sehn <linus@fsfe.org>
 
@@ -276,10 +279,10 @@ discussion and support related to the project.
 You can find the full contribution guidelines at
 <https://reuse.readthedocs.io/en/latest/contributing.html>.
 
-## License
+## Licensing
 
 This work is licensed under multiple licences. Because keeping this section
-up-to-date is challenging, here is a brief summary as of February 2023:
+up-to-date is challenging, here is a brief summary as of April 2024:
 
 - All original source code is licensed under GPL-3.0-or-later.
 - All documentation is licensed under CC-BY-SA-4.0.

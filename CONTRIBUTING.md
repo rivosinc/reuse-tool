@@ -59,9 +59,9 @@ Next, you'll find the following commands handy:
 ### Poetry
 
 Because our downstreams may not have a very recent version of Poetry, we should
-target `poetry-core>=1.1.0` and `poetry~=1.2.0` when interacting with Poetry,
+target `poetry-core>=1.4.0` and `poetry~=1.3.0` when interacting with Poetry,
 especially when generating the `poetry.lock` file. You can
-`pip install poetry~=1.2.0` to ascertain that you always get this right.
+`pip install poetry~=1.3.0` to ascertain that you always get this right.
 
 In order to update the `poetry.lock` file while changing as few lines as
 possible, run `poetry lock --no-update`.
@@ -70,7 +70,7 @@ possible, run `poetry lock --no-update`.
 
 - Verify changelog
 - Create branch release-x.y.z
-- `bumpversion --new-version x.y.z minor`
+- `bumpver update --set-version vx.y.z`
 - `make update-resources`
 - Alter changelog
 - Do some final tweaks/bugfixes (and alter changelog)
@@ -83,6 +83,13 @@ possible, run `poetry lock --no-update`.
 - `git merge release-x.y.z`
 - `git push origin main`
 - Create a release on GitHub.
+
+### After release
+
 - Update readthedocs (if not happened automatically)
 - Update API worker: https://git.fsfe.org/reuse/api-worker#user-content-server
 - Make sure package is updated in distros (contact maintainers)
+- Update the revision in `dev.md` of
+  [reuse-website](https://github.com/fsfe/reuse-website).
+- If a major release, make sure
+  [reuse-action](https://github.com/fsfe/reuse-action/) is updated.
