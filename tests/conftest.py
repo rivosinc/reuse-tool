@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2023 Matthias Riße
+# SPDX-FileCopyrightText: 2024 Skyler Grey <sky@a.starrysky.fyi>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -9,6 +10,7 @@
 
 # pylint: disable=redefined-outer-name,invalid-name
 
+import contextlib
 import datetime
 import logging
 import multiprocessing as mp
@@ -36,7 +38,13 @@ try:
 except ImportError:
     sys.path.append(os.path.join(Path(__file__).parent.parent, "src"))
 finally:
-    from reuse._util import GIT_EXE, HG_EXE, PIJUL_EXE, setup_logging
+    from reuse._util import (
+        GIT_EXE,
+        HG_EXE,
+        JUJUTSU_EXE,
+        PIJUL_EXE,
+        setup_logging,
+    )
     from reuse.global_licensing import ReuseDep5
 
 CWD = Path.cwd()
@@ -83,6 +91,13 @@ def pytest_runtest_setup(item):
     # Make sure to restore CWD
     os.chdir(CWD)
 
+    # TODO: Awful workaround. In `main`, this environment variable is set under
+    # certain conditions. This means that all tests that run _after_ that
+    # condition is met also have the environment variable set, because the
+    # environment had been changed. There should be a better way to scope this.
+    with contextlib.suppress(KeyError):
+        del os.environ["_SUPPRESS_DEP5_WARNING"]
+
 
 @pytest.fixture()
 def git_exe() -> str:
@@ -98,6 +113,14 @@ def hg_exe() -> str:
     if not HG_EXE:
         pytest.skip("cannot run this test without mercurial")
     return str(HG_EXE)
+
+
+@pytest.fixture()
+def jujutsu_exe() -> str:
+    """Run the test with Jujutsu."""
+    if not JUJUTSU_EXE:
+        pytest.skip("cannot run this test without jujutsu")
+    return str(JUJUTSU_EXE)
 
 
 @pytest.fixture()
@@ -262,6 +285,19 @@ def hg_repository(fake_repository: Path, hg_exe: str) -> Path:
             "initial",
         ],
         check=True,
+    )
+
+    return fake_repository
+
+
+@pytest.fixture()
+def jujutsu_repository(fake_repository: Path, jujutsu_exe: str) -> Path:
+    """Create a jujutsu repository with ignored files."""
+    os.chdir(fake_repository)
+    _repo_contents(fake_repository)
+
+    subprocess.run(
+        [jujutsu_exe, "git", "init", str(fake_repository)], check=True
     )
 
     return fake_repository

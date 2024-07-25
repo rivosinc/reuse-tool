@@ -1,14 +1,15 @@
 # SPDX-FileCopyrightText: 2019 Free Software Foundation Europe e.V. <https://fsfe.org>
-# SPDX-FileCopyrightText: 2019 Stefan Bakker <s.bakker777@gmail.com>
 # SPDX-FileCopyrightText: 2019 Kirill Elagin <kirelagin@gmail.com>
+# SPDX-FileCopyrightText: 2019 Stefan Bakker <s.bakker777@gmail.com>
 # SPDX-FileCopyrightText: 2020 Dmitry Bogatov
-# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
-# SPDX-FileCopyrightText: 2021 Alvar Penning
 # SPDX-FileCopyrightText: 2021 Alliander N.V. <https://alliander.com>
+# SPDX-FileCopyrightText: 2021 Alvar Penning
 # SPDX-FileCopyrightText: 2021 Robin Vobruba <hoijui.quaero@gmail.com>
+# SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2022 Yaman Qalieh
-# SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
+# SPDX-FileCopyrightText: 2024 Rivos Inc.
+# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -18,7 +19,7 @@ import datetime
 import logging
 import os
 import sys
-from argparse import ArgumentParser, Namespace
+from argparse import SUPPRESS, ArgumentParser, Namespace
 from gettext import gettext as _
 from pathlib import Path
 from typing import IO, Iterable, Optional, Set, Tuple, Type, cast
@@ -29,7 +30,7 @@ from jinja2.exceptions import TemplateNotFound
 
 from . import ReuseInfo
 from ._util import (
-    _COPYRIGHT_STYLES,
+    _COPYRIGHT_PREFIXES,
     PathType,
     StrPath,
     _determine_license_path,
@@ -304,13 +305,13 @@ def get_reuse_info(args: Namespace, year: Optional[str]) -> ReuseInfo:
     --contributor.
     """
     expressions = set(args.license) if args.license is not None else set()
-    copyright_style = (
-        args.copyright_style if args.copyright_style is not None else "spdx"
+    copyright_prefix = (
+        args.copyright_prefix if args.copyright_prefix is not None else "spdx"
     )
     copyright_lines = (
         {
             make_copyright_line(
-                item, year=year, copyright_style=copyright_style
+                item, year=year, copyright_prefix=copyright_prefix
             )
             for item in args.copyright
         }
@@ -410,10 +411,16 @@ def add_arguments(parser: ArgumentParser) -> None:
         help=_("comment style to use, optional"),
     )
     parser.add_argument(
+        "--copyright-prefix",
+        action="store",
+        choices=list(_COPYRIGHT_PREFIXES.keys()),
+        help=_("copyright prefix to use, optional"),
+    )
+    parser.add_argument(
         "--copyright-style",
         action="store",
-        choices=list(_COPYRIGHT_STYLES.keys()),
-        help=_("copyright style to use, optional"),
+        dest="copyright_prefix",
+        help=SUPPRESS,
     )
     parser.add_argument(
         "--template",
@@ -477,6 +484,12 @@ def add_arguments(parser: ArgumentParser) -> None:
         "--skip-unrecognised",
         action="store_true",
         help=_("skip files with unrecognised comment styles"),
+    )
+    style_mutex_group.add_argument(
+        "--skip-unrecognized",
+        dest="skip_unrecognised",
+        action="store_true",
+        help=SUPPRESS,
     )
     parser.add_argument(
         "--skip-existing",

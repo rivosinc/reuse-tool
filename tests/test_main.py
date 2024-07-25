@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2019 Free Software Foundation Europe e.V. <https://fsfe.org>
 # SPDX-FileCopyrightText: 2019 Stefan Bakker <s.bakker777@gmail.com>
-# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 # SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2022 Pietro Albini <pietro.albini@ferrous-systems.com>
 # SPDX-FileCopyrightText: 2024 Carmen Bianca BAKKER <carmenbianca@fsfe.org>
+# SPDX-FileCopyrightText: 2024 Skyler Grey <sky@a.starrysky.fyi>
+# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -16,6 +17,7 @@ import json
 import os
 import re
 import shutil
+import warnings
 from inspect import cleandoc
 from pathlib import Path
 from typing import Generator, Optional
@@ -28,7 +30,7 @@ from freezegun import freeze_time
 
 from reuse import download
 from reuse._main import main
-from reuse._util import GIT_EXE, HG_EXE, PIJUL_EXE, cleandoc_nl
+from reuse._util import GIT_EXE, HG_EXE, JUJUTSU_EXE, PIJUL_EXE, cleandoc_nl
 from reuse.report import LINT_VERSION
 
 # REUSE-IgnoreStart
@@ -53,6 +55,17 @@ def optional_hg_exe(
     exe = HG_EXE if request.param else ""
     monkeypatch.setattr("reuse.vcs.HG_EXE", exe)
     monkeypatch.setattr("reuse._util.HG_EXE", exe)
+    yield exe
+
+
+@pytest.fixture(params=[True, False])
+def optional_jujutsu_exe(
+    request, monkeypatch
+) -> Generator[Optional[str], None, None]:
+    """Run the test with or without Jujutsu."""
+    exe = JUJUTSU_EXE if request.param else ""
+    monkeypatch.setattr("reuse.vcs.JUJUTSU_EXE", exe)
+    monkeypatch.setattr("reuse._util.JUJUTSU_EXE", exe)
     yield exe
 
 
@@ -637,6 +650,14 @@ def test_convert_dep5_no_dep5_file(fake_repository, stringio):
     """Cannot convert when there is no .reuse/dep5 file."""
     with pytest.raises(SystemExit):
         main(["convert-dep5"], out=stringio)
+
+
+def test_convert_dep5_no_warning(fake_repository_dep5, stringio):
+    """No PendingDeprecationWarning when running convert-dep5."""
+    with warnings.catch_warnings(record=True) as caught_warnings:
+        result = main(["convert-dep5"], out=stringio)
+        assert result == 0
+        assert not caught_warnings
 
 
 # REUSE-IgnoreEnd

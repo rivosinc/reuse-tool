@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2017 Free Software Foundation Europe e.V. <https://fsfe.org>
-# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
-# SPDX-FileCopyrightText: 2022 Nico Rikken <nico.rikken@fsfe.org>
-# SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
+# SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
+# SPDX-FileCopyrightText: 2022 Nico Rikken <nico.rikken@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Pietro Albini <pietro.albini@ferrous-systems.com>
+# SPDX-FileCopyrightText: 2024 Rivos Inc.
+# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -123,12 +124,15 @@ def test_extract_copyright_variations():
     """There are multiple ways to declare copyright. All should be detected."""
     text = cleandoc(
         """
-        SPDX-FileCopyrightText: 2019 Jane Doe
-        SPDX-FileCopyrightText: © 2019 Jane Doe
-        © 2019 Jane Doe
-        Copyright © 2019 Jane Doe
-        Copyright 2019 Jane Doe
-        Copyright (C) 2019 Jane Doe
+        SPDX-FileCopyrightText: 2019 spdx
+        SPDX-FileCopyrightText: (C) 2019 spdx-c
+        SPDX-FileCopyrightText: © 2019 spdx-symbol
+        SPDX-FileCopyrightText: Copyright (C) 2019 spdx-string-c
+        SPDX-FileCopyrightText: Copyright © 2019 spdx-string-symbol
+        Copyright 2019 string
+        Copyright (C) 2019 string-c
+        Copyright © 2019 string-symbol
+        © 2019 symbol
         """
     )
 
@@ -381,64 +385,88 @@ def test_make_copyright_line_year():
     )
 
 
-def test_make_copyright_line_style_spdx():
-    """Given a simple statement and style, make it a copyright line."""
-    statement = _util.make_copyright_line("hello", copyright_style="spdx")
+def test_make_copyright_line_prefix_spdx():
+    """Given a simple statement and prefix, make it a copyright line."""
+    statement = _util.make_copyright_line("hello", copyright_prefix="spdx")
     assert statement == "SPDX-FileCopyrightText: hello"
 
 
-def test_make_copyright_line_style_spdx_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_spdx_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="spdx"
+        "hello", year=2019, copyright_prefix="spdx"
     )
     assert statement == "SPDX-FileCopyrightText: 2019 hello"
 
 
-def test_make_copyright_line_style_spdx_c_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_spdx_c_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="spdx-c"
+        "hello", year=2019, copyright_prefix="spdx-c"
     )
     assert statement == "SPDX-FileCopyrightText: (C) 2019 hello"
 
 
-def test_make_copyright_line_style_spdx_symbol_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_spdx_symbol_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="spdx-symbol"
+        "hello", year=2019, copyright_prefix="spdx-symbol"
     )
     assert statement == "SPDX-FileCopyrightText: © 2019 hello"
 
 
-def test_make_copyright_line_style_string_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_string_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="string"
+        "hello", year=2019, copyright_prefix="string"
     )
     assert statement == "Copyright 2019 hello"
 
 
-def test_make_copyright_line_style_string_c_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_string_c_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="string-c"
+        "hello", year=2019, copyright_prefix="string-c"
     )
     assert statement == "Copyright (C) 2019 hello"
 
 
-def test_make_copyright_line_style_string_symbol_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_spdx_string_c_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="string-symbol"
+        "hello", year=2019, copyright_prefix="spdx-string-c"
+    )
+    assert statement == "SPDX-FileCopyrightText: Copyright (C) 2019 hello"
+
+
+def test_make_copyright_line_prefix_spdx_string_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
+    statement = _util.make_copyright_line(
+        "hello", year=2019, copyright_prefix="spdx-string"
+    )
+    assert statement == "SPDX-FileCopyrightText: Copyright 2019 hello"
+
+
+def test_make_copyright_line_prefix_spdx_string_symbol_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
+    statement = _util.make_copyright_line(
+        "hello", year=2019, copyright_prefix="spdx-string-symbol"
+    )
+    assert statement == "SPDX-FileCopyrightText: Copyright © 2019 hello"
+
+
+def test_make_copyright_line_prefix_string_symbol_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
+    statement = _util.make_copyright_line(
+        "hello", year=2019, copyright_prefix="string-symbol"
     )
     assert statement == "Copyright © 2019 hello"
 
 
-def test_make_copyright_line_style_symbol_year():
-    """Given a simple statement, style and a year, make it a copyright line."""
+def test_make_copyright_line_prefix_symbol_year():
+    """Given a simple statement, prefix and a year, make it a copyright line."""
     statement = _util.make_copyright_line(
-        "hello", year=2019, copyright_style="symbol"
+        "hello", year=2019, copyright_prefix="symbol"
     )
     assert statement == "© 2019 hello"
 

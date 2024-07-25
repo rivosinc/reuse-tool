@@ -19,7 +19,7 @@ recommendations.
 - Documentation: <https://reuse.readthedocs.io> and <https://reuse.software>
 - Source code: <https://github.com/fsfe/reuse-tool>
 - PyPI: <https://pypi.python.org/pypi/reuse>
-- REUSE: 3.0
+- REUSE: 3.2
 - Python: 3.8+
 
 ## Table of contents
@@ -118,6 +118,7 @@ For full functionality, the following pieces of software are recommended:
 - Git
 - Mercurial 4.3+
 - Pijul
+- Jujutsu
 
 ### Installation via pip
 
@@ -178,7 +179,7 @@ To check against the recommendations, use `reuse lint`:
 ~/Projects/reuse-tool $ reuse lint
 [...]
 
-Congratulations! Your project is compliant with version 3.0 of the REUSE Specification :-)
+Congratulations! Your project is compliant with version 3.2 of the REUSE Specification :-)
 ```
 
 This tool can do various more things, detailed in the documentation. Here a
@@ -273,11 +274,16 @@ requests, and pull requests. Even and especially when in doubt, feel free to
 open an issue with a question. Contributions of all types are welcome, and the
 development team is happy to provide guidance and support for new contributors.
 
+You should exercise some caution when opening a pull request to make changes
+which were not (yet) acknowledged by the team as pertinent. Such pull requests
+may be closed, leading to disappointment. To avoid this, please open an issue
+first.
+
 Additionally, the <reuse@lists.fsfe.org> mailing list is available for
 discussion and support related to the project.
 
 You can find the full contribution guidelines at
-<https://reuse.readthedocs.io/en/latest/contributing.html>.
+<https://reuse.readthedocs.io/en/latest/contribute.html>.
 
 ## Licensing
 

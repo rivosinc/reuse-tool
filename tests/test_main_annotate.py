@@ -1,9 +1,10 @@
 # SPDX-FileCopyrightText: 2019 Free Software Foundation Europe e.V. <https://fsfe.org>
 # SPDX-FileCopyrightText: 2019 Stefan Bakker <s.bakker777@gmail.com>
-# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
-# SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
+# SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2023 Maxim Cournoyer <maxim.cournoyer@gmail.com>
+# SPDX-FileCopyrightText: 2024 Rivos Inc.
+# SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -275,6 +276,45 @@ def test_annotate_no_year(fake_repository, stringio):
     assert simple_file.read_text() == expected
 
 
+@pytest.mark.parametrize(
+    "copyright_prefix", ["--copyright-prefix", "--copyright-style"]
+)
+def test_annotate_copyright_prefix(
+    fake_repository, copyright_prefix, stringio, mock_date_today
+):
+    """Add a header with a specific copyright prefix. Also test the old name of
+    the parameter.
+    """
+    simple_file = fake_repository / "foo.py"
+    simple_file.write_text("pass")
+    expected = cleandoc(
+        """
+        # Copyright 2018 Jane Doe
+        #
+        # SPDX-License-Identifier: GPL-3.0-or-later
+
+        pass
+        """
+    )
+
+    result = main(
+        [
+            "annotate",
+            "--license",
+            "GPL-3.0-or-later",
+            "--copyright",
+            "Jane Doe",
+            copyright_prefix,
+            "string",
+            "foo.py",
+        ],
+        out=stringio,
+    )
+
+    assert result == 0
+    assert simple_file.read_text() == expected
+
+
 def test_annotate_shebang(fake_repository, stringio):
     """Keep the shebang when annotating."""
     simple_file = fake_repository / "foo.py"
@@ -442,7 +482,7 @@ def test_annotate_specify_style(fake_repository, stringio, mock_date_today):
             "--copyright",
             "Jane Doe",
             "--style",
-            "c",
+            "cpp",
             "foo.py",
         ],
         out=stringio,
@@ -563,7 +603,12 @@ def test_annotate_unrecognised_style(fake_repository, capsys):
     assert "foo.foo" in stdout
 
 
-def test_annotate_skip_unrecognised(fake_repository, stringio):
+@pytest.mark.parametrize(
+    "skip_unrecognised", ["--skip-unrecognised", "--skip-unrecognized"]
+)
+def test_annotate_skip_unrecognised(
+    fake_repository, skip_unrecognised, stringio
+):
     """Skip file that has an unrecognised extension."""
     simple_file = fake_repository / "foo.foo"
     simple_file.write_text("pass")
@@ -575,7 +620,7 @@ def test_annotate_skip_unrecognised(fake_repository, stringio):
             "GPL-3.0-or-later",
             "--copyright",
             "Jane Doe",
-            "--skip-unrecognised",
+            skip_unrecognised,
             "foo.foo",
         ],
         out=stringio,
