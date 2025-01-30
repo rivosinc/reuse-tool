@@ -28,18 +28,14 @@ headers, in any case.
 import logging
 import operator
 import re
+from pathlib import Path
 from textwrap import dedent
-from typing import List, NamedTuple, Optional, Type
+from typing import NamedTuple, Optional, Type, cast
+
+from .exceptions import CommentCreateError, CommentParseError
+from .types import StrPath
 
 _LOGGER = logging.getLogger(__name__)
-
-
-class CommentParseError(Exception):
-    """An error occurred during the parsing of a comment."""
-
-
-class CommentCreateError(Exception):
-    """An error occurred during the creation of a comment."""
 
 
 class MultiLineSegments(NamedTuple):
@@ -65,7 +61,7 @@ class CommentStyle:
     INDENT_BEFORE_MIDDLE = ""
     INDENT_AFTER_MIDDLE = ""
     INDENT_BEFORE_END = ""
-    SHEBANGS: List[str] = []
+    SHEBANGS: list[str] = []
 
     @classmethod
     def can_handle_single(cls) -> bool:
@@ -162,10 +158,9 @@ class CommentStyle:
         result_lines = []
 
         for line in text.splitlines():
-            # TODO: When Python 3.8 is dropped, consider using str.removeprefix
             if cls.SINGLE_LINE_REGEXP:
                 if match := cls.SINGLE_LINE_REGEXP.match(line):
-                    line = line.lstrip(match.group(0))
+                    line = line.removeprefix(match.group(0))
                     result_lines.append(line)
                     continue
 
@@ -173,7 +168,7 @@ class CommentStyle:
                 raise CommentParseError(
                     f"'{line}' does not start with a comment marker"
                 )
-            line = line.lstrip(cls.SINGLE_LINE)
+            line = line.removeprefix(cls.SINGLE_LINE)
             result_lines.append(line)
 
         result = "\n".join(result_lines)
@@ -420,6 +415,7 @@ class HaskellCommentStyle(CommentStyle):
 
     SINGLE_LINE = "--"
     INDENT_AFTER_SINGLE = " "
+    SHEBANGS = ["cabal-version:"]
 
 
 class HtmlCommentStyle(CommentStyle):
@@ -606,6 +602,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".bib": BibTexCommentStyle,
     ".bzl": PythonCommentStyle,
     ".c": CCommentStyle,
+    ".cabal": HaskellCommentStyle,
     ".cc": CppCommentStyle,
     ".cjs": CppCommentStyle,
     ".cl": LispCommentStyle,
@@ -851,6 +848,7 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".dockerignore": PythonCommentStyle,
     ".earthlyignore": PythonCommentStyle,
     ".editorconfig": PythonCommentStyle,
+    ".envrc": PythonCommentStyle,
     ".empty": EmptyCommentStyle,
     ".eslintignore": PythonCommentStyle,
     ".eslintrc": UncommentableCommentStyle,
@@ -875,7 +873,8 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".yarnrc": PythonCommentStyle,
     "ansible.cfg": PythonCommentStyle,
     "archive.sctxar": UncommentableCommentStyle,  # SuperCollider global archive
-    "Cargo.lock": UncommentableCommentStyle,
+    "cabal.project": HaskellCommentStyle,
+    "Cargo.lock": PythonCommentStyle,
     "CMakeLists.txt": PythonCommentStyle,
     "CODEOWNERS": PythonCommentStyle,
     "configure.ac": M4CommentStyle,
@@ -883,6 +882,7 @@ FILENAME_COMMENT_STYLE_MAP = {
     "Dockerfile": PythonCommentStyle,
     "Doxyfile": PythonCommentStyle,
     "Earthfile": PythonCommentStyle,
+    "flake.lock": UncommentableCommentStyle,  # is a JSON file
     "Gemfile": PythonCommentStyle,
     "go.mod": CppCommentStyle,
     "go.sum": UncommentableCommentStyle,
@@ -909,7 +909,7 @@ FILENAME_COMMENT_STYLE_MAP_LOWERCASE = {
 }
 
 
-def _all_style_classes() -> List[Type[CommentStyle]]:
+def _all_style_classes() -> list[Type[CommentStyle]]:
     """Return a list of all defined style classes, excluding the base class."""
     result = []
     for key, value in globals().items():
@@ -924,3 +924,25 @@ _result.remove(UncommentableCommentStyle)
 
 #: A map of human-friendly names against style classes.
 NAME_STYLE_MAP = {style.SHORTHAND: style for style in _result}
+
+
+def get_comment_style(path: StrPath) -> Optional[Type[CommentStyle]]:
+    """Return value of CommentStyle detected for *path* or None."""
+    path = Path(path)
+    style = FILENAME_COMMENT_STYLE_MAP_LOWERCASE.get(path.name.lower())
+    if style is None:
+        style = cast(
+            Optional[Type[CommentStyle]],
+            EXTENSION_COMMENT_STYLE_MAP_LOWERCASE.get(path.suffix.lower()),
+        )
+    return style
+
+
+def is_uncommentable(path: Path) -> bool:
+    """*path*'s extension has the UncommentableCommentStyle."""
+    return get_comment_style(path) == UncommentableCommentStyle
+
+
+def has_style(path: Path) -> bool:
+    """*path*'s extension has a CommentStyle."""
+    return get_comment_style(path) is not None

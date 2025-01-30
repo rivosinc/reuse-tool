@@ -19,8 +19,8 @@ recommendations.
 - Documentation: <https://reuse.readthedocs.io> and <https://reuse.software>
 - Source code: <https://github.com/fsfe/reuse-tool>
 - PyPI: <https://pypi.python.org/pypi/reuse>
-- REUSE: 3.2
-- Python: 3.8+
+- REUSE: 3.3
+- Python: 3.9+
 
 ## Table of contents
 
@@ -179,7 +179,7 @@ To check against the recommendations, use `reuse lint`:
 ~/Projects/reuse-tool $ reuse lint
 [...]
 
-Congratulations! Your project is compliant with version 3.2 of the REUSE Specification :-)
+Congratulations! Your project is compliant with version 3.3 of the REUSE Specification :-)
 ```
 
 This tool can do various more things, detailed in the documentation. Here a
@@ -188,10 +188,11 @@ short summary:
 - `annotate` --- Add copyright and/or licensing information to the header of a
   file.
 - `download` --- Download the specified license into the `LICENSES/` directory.
-- `init` --- Set up the project for REUSE compliance.
 - `lint` --- Verify the project for REUSE compliance.
+- `lint-file` --- Verify REUSE compliance of individual files.
 - `spdx` --- Generate an SPDX Document of all files in the project.
 - `supported-licenses` --- Prints all licenses supported by REUSE.
+- `convert-dep5` --- Convert .reuse/dep5 to REUSE.toml.
 
 ### Example demo
 
@@ -247,7 +248,7 @@ Git. This uses [pre-commit](https://pre-commit.com/). Once you
 ```yaml
 repos:
   - repo: https://github.com/fsfe/reuse-tool
-    rev: v3.0.2
+    rev: v5.0.2
     hooks:
       - id: reuse
 ```
@@ -255,6 +256,32 @@ repos:
 Then run `pre-commit install`. Now, every time you commit, `reuse lint` is run
 in the background, and will prevent your commit from going through if there was
 an error.
+
+If you instead want to only lint files that were changed in your commit, you can
+use the following configuration:
+
+```yaml
+repos:
+  - repo: https://github.com/fsfe/reuse-tool
+    rev: v5.0.2
+    hooks:
+      - id: reuse-lint-file
+```
+
+### Shell completion
+
+In order to enable shell completion, you need to generate the shell completion
+script. You do this with `_REUSE_COMPLETE=bash_source reuse`. Replace `bash`
+with `zsh` or `fish` as needed, or any other shells supported by the Python
+`click` library. You can then source the output in your shell rc file, like so
+(e.g.`~/.bashrc`):
+
+```bash
+eval "$(_REUSE__COMPLETE=bash_source reuse)"
+```
+
+Alternatively, you can place the generated completion script in
+`${XDG_DATA_HOME}/bash-completion/completions/reuse`.
 
 ## Maintainers
 

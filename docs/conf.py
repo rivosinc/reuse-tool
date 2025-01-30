@@ -31,7 +31,7 @@ try:
     # The full version, including alpha/beta/rc tags.
     release = get_version("reuse")
 except PackageNotFoundError:
-    release = "3.0.2"
+    release = "5.0.2"
 
 # The short X.Y.Z version.
 version = ".".join(release.split(".")[:3])
@@ -62,7 +62,7 @@ exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
 
 apidoc_module_dir = str(ROOT_DIR / "src/reuse")
 # apidoc_output_dir = "api"
-# apidoc_excluded_paths = []
+apidoc_excluded_paths = ["cli"]
 apidoc_separate_modules = True
 apidoc_toc_file = False
 apidoc_extra_args = ["--maxdepth", "2"]
@@ -116,6 +116,14 @@ man_pages = [
         1,
     ),
     (
+        "man/reuse-lint-file",
+        "reuse-lint-file",
+        "Verify whether the specified files are compliant with the REUSE"
+        " Specification",
+        "Free Software Foundation Europe",
+        1,
+    ),
+    (
         "man/reuse-spdx",
         "reuse-spdx",
         "Generate SPDX bill of materials",
@@ -130,6 +138,11 @@ man_pages = [
         1,
     ),
 ]
+manpages_url = (
+    "https://reuse.readthedocs.io/en/v{version}/man/{page}.html".format(
+        version=version, page="{page}"
+    )
+)
 
 # -- Custom ------------------------------------------------------------------
 

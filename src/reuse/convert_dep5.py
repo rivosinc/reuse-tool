@@ -5,16 +5,12 @@
 """Logic to convert a .reuse/dep5 file to a REUSE.toml file."""
 
 import re
-import sys
-from argparse import ArgumentParser, Namespace
-from gettext import gettext as _
-from typing import IO, Any, Dict, Iterable, List, Optional, TypeVar, Union, cast
+from typing import Any, Iterable, Optional, TypeVar, Union, cast
 
 import tomlkit
 from debian.copyright import Copyright, FilesParagraph, Header
 
-from .global_licensing import REUSE_TOML_VERSION, ReuseDep5
-from .project import Project
+from .global_licensing import REUSE_TOML_VERSION
 
 _SINGLE_ASTERISK_PATTERN = re.compile(r"(?<!\*)\*(?!\*)")
 
@@ -23,8 +19,8 @@ _T = TypeVar("_T")
 
 def _collapse_list_if_one_item(
     # Technically this should be Sequence[_T], but I can't get that to work.
-    sequence: List[_T],
-) -> Union[List[_T], _T]:
+    sequence: list[_T],
+) -> Union[list[_T], _T]:
     """Return the only item of the list if the length of the list is one, else
     return the list.
     """
@@ -35,8 +31,8 @@ def _collapse_list_if_one_item(
 
 def _header_from_dep5_header(
     header: Header,
-) -> Dict[str, Union[str, List[str]]]:
-    result: Dict[str, Union[str, List[str]]] = {}
+) -> dict[str, Union[str, list[str]]]:
+    result: dict[str, Union[str, list[str]]] = {}
     if header.upstream_name:
         result["SPDX-PackageName"] = str(header.upstream_name)
     if header.upstream_contact:
@@ -52,7 +48,7 @@ def _header_from_dep5_header(
 
 def _copyrights_from_paragraph(
     paragraph: FilesParagraph,
-) -> Union[str, List[str]]:
+) -> Union[str, list[str]]:
     return _collapse_list_if_one_item(
         [line.strip() for line in cast(str, paragraph.copyright).splitlines()]
     )
@@ -65,7 +61,7 @@ def _convert_asterisk(path: str) -> str:
     return _SINGLE_ASTERISK_PATTERN.sub("**", path)
 
 
-def _paths_from_paragraph(paragraph: FilesParagraph) -> Union[str, List[str]]:
+def _paths_from_paragraph(paragraph: FilesParagraph) -> Union[str, list[str]]:
     return _collapse_list_if_one_item(
         [_convert_asterisk(path) for path in list(paragraph.files)]
     )
@@ -77,7 +73,7 @@ def _comment_from_paragraph(paragraph: FilesParagraph) -> Optional[str]:
 
 def _annotations_from_paragraphs(
     paragraphs: Iterable[FilesParagraph],
-) -> List[Dict[str, Union[str, List[str]]]]:
+) -> list[dict[str, Union[str, list[str]]]]:
     annotations = []
     for paragraph in paragraphs:
         copyrights = _copyrights_from_paragraph(paragraph)
@@ -99,28 +95,7 @@ def toml_from_dep5(dep5: Copyright) -> str:
     """Given a Copyright object, return an equivalent REUSE.toml string."""
     header = _header_from_dep5_header(dep5.header)
     annotations = _annotations_from_paragraphs(dep5.all_files_paragraphs())
-    result: Dict[str, Any] = {"version": REUSE_TOML_VERSION}
+    result: dict[str, Any] = {"version": REUSE_TOML_VERSION}
     result.update(header)
     result["annotations"] = annotations
     return tomlkit.dumps(result)
-
-
-# pylint: disable=unused-argument
-def add_arguments(parser: ArgumentParser) -> None:
-    """Add arguments to parser."""
-    # Nothing to do.
-
-
-# pylint: disable=unused-argument
-def run(args: Namespace, project: Project, out: IO[str] = sys.stdout) -> int:
-    """Convert .reuse/dep5 to REUSE.toml."""
-    if not (project.root / ".reuse/dep5").exists():
-        args.parser.error(_("no '.reuse/dep5' file"))
-
-    text = toml_from_dep5(
-        cast(ReuseDep5, project.global_licensing).dep5_copyright
-    )
-    (project.root / "REUSE.toml").write_text(text)
-    (project.root / ".reuse/dep5").unlink()
-
-    return 0

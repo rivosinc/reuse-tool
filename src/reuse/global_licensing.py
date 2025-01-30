@@ -6,24 +6,18 @@
 
 # mypy: disable-error-code=attr-defined
 
-import contextlib
 import logging
 import re
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from enum import Enum
-from gettext import gettext as _
 from pathlib import Path, PurePath
 from typing import (
     Any,
     Callable,
     Collection,
-    Dict,
     Generator,
-    List,
     Optional,
-    Set,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -39,8 +33,16 @@ from debian.copyright import Copyright
 from debian.copyright import Error as DebianError
 from license_expression import ExpressionError
 
-from . import ReuseInfo, SourceType
-from ._util import _LICENSING, StrPath
+from . import _LICENSING, ReuseInfo, SourceType
+from .covered_files import iter_files
+from .exceptions import (
+    GlobalLicensingParseError,
+    GlobalLicensingParseTypeError,
+    GlobalLicensingParseValueError,
+)
+from .i18n import _
+from .types import StrPath
+from .vcs import VCSStrategy
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -48,6 +50,14 @@ _T = TypeVar("_T")
 
 #: Current version of REUSE.toml.
 REUSE_TOML_VERSION = 1
+
+#: Relation between Python attribute names and TOML keys.
+_TOML_KEYS = {
+    "paths": "path",
+    "precedence": "precedence",
+    "copyright_lines": "SPDX-FileCopyrightText",
+    "spdx_expressions": "SPDX-License-Identifier",
+}
 
 
 class PrecedenceType(Enum):
@@ -66,24 +76,6 @@ class PrecedenceType(Enum):
     OVERRIDE = "override"
 
 
-class GlobalLicensingParseError(Exception):
-    """An exception representing any kind of error that occurs when trying to
-    parse a :class:`GlobalLicensing` file.
-    """
-
-
-class GlobalLicensingParseTypeError(TypeError, GlobalLicensingParseError):
-    """An exception representing a type error while trying to parse a
-    :class:`GlobalLicensing` file.
-    """
-
-
-class GlobalLicensingParseValueError(GlobalLicensingParseError, ValueError):
-    """An exception representing a value error while trying to parse a
-    :class:`GlobalLicensing` file.
-    """
-
-
 @attrs.define
 class _CollectionOfValidator:
     collection_type: Type[Collection] = attrs.field()
@@ -98,10 +90,11 @@ class _CollectionOfValidator:
     ) -> None:
         # This is a hack to display the TOML's key names instead of the Python
         # attributes.
-        if hasattr(instance, "TOML_KEYS"):
-            attr_name = instance.TOML_KEYS[attribute.name]
+        if isinstance(instance, AnnotationsItem):
+            attr_name = _TOML_KEYS[attribute.name]
         else:
             attr_name = attribute.name
+        source = getattr(instance, "source", None)
 
         if not isinstance(value, self.collection_type):
             raise GlobalLicensingParseTypeError(
@@ -113,7 +106,8 @@ class _CollectionOfValidator:
                     type_name=self.collection_type.__name__,
                     value=repr(value),
                     value_class=repr(value.__class__),
-                )
+                ),
+                source=source,
             )
         for item in value:
             if not isinstance(item, self.value_type):
@@ -126,13 +120,15 @@ class _CollectionOfValidator:
                         type_name=self.value_type.__name__,
                         item_value=repr(item),
                         item_class=repr(item.__class__),
-                    )
+                    ),
+                    source=source,
                 )
         if not self.optional and not value:
             raise GlobalLicensingParseValueError(
                 _("{attr_name} must not be empty.").format(
-                    attr_name=repr(attr_name)
-                )
+                    attr_name=repr(attr_name),
+                ),
+                source=source,
             )
 
 
@@ -160,7 +156,8 @@ class _InstanceOfValidator(_AttrInstanceOfValidator):
                     type=repr(error.args[2].__name__),
                     value=repr(error.args[3]),
                     value_type=repr(error.args[3].__class__),
-                )
+                ),
+                source=getattr(inst, "source", None),
             ) from error
 
 
@@ -173,7 +170,7 @@ def _instance_of(
 def _str_to_global_precedence(value: Any) -> PrecedenceType:
     try:
         return PrecedenceType(value)
-    except ValueError as err:
+    except ValueError as error:
         raise GlobalLicensingParseValueError(
             _(
                 "The value of 'precedence' must be one of {precedence_vals}"
@@ -184,22 +181,22 @@ def _str_to_global_precedence(value: Any) -> PrecedenceType:
                 ),
                 received=repr(value),
             )
-        ) from err
+        ) from error
 
 
 @overload
-def _str_to_set(value: str) -> Set[str]: ...
+def _str_to_set(value: str) -> set[str]: ...
 
 
 @overload
-def _str_to_set(value: Union[None, _T, Collection[_T]]) -> Set[_T]: ...
+def _str_to_set(value: Union[None, _T, Collection[_T]]) -> set[_T]: ...
 
 
 def _str_to_set(
     value: Union[str, None, _T, Collection[_T]]
-) -> Union[Set[str], Set[_T]]:
+) -> Union[set[str], set[_T]]:
     if value is None:
-        return cast(Set[str], set())
+        return cast(set[str], set())
     if isinstance(value, str):
         return {value}
     if hasattr(value, "__iter__"):
@@ -207,7 +204,7 @@ def _str_to_set(
     return {value}
 
 
-def _str_to_set_of_expr(value: Any) -> Set[Expression]:
+def _str_to_set_of_expr(value: Any) -> set[Expression]:
     value = _str_to_set(value)
     result = set()
     for expression in value:
@@ -232,13 +229,12 @@ class GlobalLicensing(ABC):
 
     @classmethod
     @abstractmethod
-    def from_file(cls, path: StrPath) -> "GlobalLicensing":
+    def from_file(cls, path: StrPath, **kwargs: Any) -> "GlobalLicensing":
         """Parse the file and create a :class:`GlobalLicensing` object from its
         contents.
 
         Raises:
             FileNotFoundError: file doesn't exist.
-            UnicodeDecodeError: could not decode file as UTF-8.
             OSError: some other error surrounding I/O.
             GlobalLicensingParseError: file could not be parsed.
         """
@@ -246,7 +242,7 @@ class GlobalLicensing(ABC):
     @abstractmethod
     def reuse_info_of(
         self, path: StrPath
-    ) -> Dict[PrecedenceType, List[ReuseInfo]]:
+    ) -> dict[PrecedenceType, list[ReuseInfo]]:
         """Find the REUSE information of *path* defined in the configuration.
         The path must be relative to the root of a
         :class:`reuse.project.Project`.
@@ -262,22 +258,26 @@ class ReuseDep5(GlobalLicensing):
     dep5_copyright: Copyright
 
     @classmethod
-    def from_file(cls, path: StrPath) -> "ReuseDep5":
+    def from_file(cls, path: StrPath, **kwargs: Any) -> "ReuseDep5":
         path = Path(path)
         try:
             with path.open(encoding="utf-8") as fp:
                 return cls(str(path), Copyright(fp))
-        except UnicodeDecodeError:
-            raise
+        except UnicodeDecodeError as error:
+            raise GlobalLicensingParseError(
+                str(error), source=str(path)
+            ) from error
         # TODO: Remove ValueError once
         # <https://salsa.debian.org/python-debian-team/python-debian/-/merge_requests/123>
         # is closed
         except (DebianError, ValueError) as error:
-            raise GlobalLicensingParseError(str(error)) from error
+            raise GlobalLicensingParseError(
+                str(error), source=str(path)
+            ) from error
 
     def reuse_info_of(
         self, path: StrPath
-    ) -> Dict[PrecedenceType, List[ReuseInfo]]:
+    ) -> dict[PrecedenceType, list[ReuseInfo]]:
         path = PurePath(path).as_posix()
         result = self.dep5_copyright.find_files_paragraph(path)
 
@@ -310,26 +310,19 @@ class AnnotationsItem:
     REUSE.toml.
     """
 
-    TOML_KEYS = {
-        "paths": "path",
-        "precedence": "precedence",
-        "copyright_lines": "SPDX-FileCopyrightText",
-        "spdx_expressions": "SPDX-License-Identifier",
-    }
-
-    paths: Set[str] = attrs.field(
+    paths: set[str] = attrs.field(
         converter=_str_to_set,
         validator=_validate_collection_of(set, str, optional=False),
     )
     precedence: PrecedenceType = attrs.field(
         converter=_str_to_global_precedence, default=PrecedenceType.CLOSEST
     )
-    copyright_lines: Set[str] = attrs.field(
+    copyright_lines: set[str] = attrs.field(
         converter=_str_to_set,
         validator=_validate_collection_of(set, str, optional=True),
         default=None,
     )
-    spdx_expressions: Set[Expression] = attrs.field(
+    spdx_expressions: set[Expression] = attrs.field(
         converter=_str_to_set_of_expr,
         validator=_validate_collection_of(set, Expression, optional=True),
         default=None,
@@ -339,6 +332,7 @@ class AnnotationsItem:
 
     def __attrs_post_init__(self) -> None:
         def translate(path: str) -> str:
+            # pylint: disable=too-many-branches
             blocks = []
             escaping = False
             globstar = False
@@ -347,7 +341,7 @@ class AnnotationsItem:
                 if char == "\\":
                     if prev_char == "\\" and escaping:
                         escaping = False
-                        blocks.append(r"\\")
+                        blocks.append("\\\\")
                     else:
                         escaping = True
                 elif char == "*":
@@ -359,6 +353,8 @@ class AnnotationsItem:
                         blocks.append(r".*")
                 elif char == "/":
                     if not globstar:
+                        if prev_char == "*":
+                            blocks.append("[^/]*")
                         blocks.append("/")
                     escaping = False
                 else:
@@ -378,20 +374,18 @@ class AnnotationsItem:
         )
 
     @classmethod
-    def from_dict(cls, values: Dict[str, Any]) -> "AnnotationsItem":
+    def from_dict(cls, values: dict[str, Any]) -> "AnnotationsItem":
         """Create an :class:`AnnotationsItem` from a dictionary that uses the
         key-value pairs for an [[annotations]] table in REUSE.toml.
         """
         new_dict = {}
-        new_dict["paths"] = values.get(cls.TOML_KEYS["paths"])
-        precedence = values.get(cls.TOML_KEYS["precedence"])
+        new_dict["paths"] = values.get(_TOML_KEYS["paths"])
+        precedence = values.get(_TOML_KEYS["precedence"])
         if precedence is not None:
             new_dict["precedence"] = precedence
-        new_dict["copyright_lines"] = values.get(
-            cls.TOML_KEYS["copyright_lines"]
-        )
+        new_dict["copyright_lines"] = values.get(_TOML_KEYS["copyright_lines"])
         new_dict["spdx_expressions"] = values.get(
-            cls.TOML_KEYS["spdx_expressions"]
+            _TOML_KEYS["spdx_expressions"]
         )
         return cls(**new_dict)  # type: ignore
 
@@ -407,22 +401,26 @@ class ReuseTOML(GlobalLicensing):
     """A class that contains the data parsed from a REUSE.toml file."""
 
     version: int = attrs.field(validator=_instance_of(int))
-    annotations: List[AnnotationsItem] = attrs.field(
+    annotations: list[AnnotationsItem] = attrs.field(
         validator=_validate_collection_of(list, AnnotationsItem, optional=True)
     )
 
     @classmethod
-    def from_dict(cls, values: Dict[str, Any], source: str) -> "ReuseTOML":
+    def from_dict(cls, values: dict[str, Any], source: str) -> "ReuseTOML":
         """Create a :class:`ReuseTOML` from the dict version of REUSE.toml."""
         new_dict = {}
         new_dict["version"] = values.get("version")
         new_dict["source"] = source
 
         annotation_dicts = values.get("annotations", [])
-        annotations = [
-            AnnotationsItem.from_dict(annotation)
-            for annotation in annotation_dicts
-        ]
+        try:
+            annotations = [
+                AnnotationsItem.from_dict(annotation)
+                for annotation in annotation_dicts
+            ]
+        except GlobalLicensingParseError as error:
+            error.source = source
+            raise error from error
 
         new_dict["annotations"] = annotations
 
@@ -434,13 +432,20 @@ class ReuseTOML(GlobalLicensing):
         try:
             tomldict = tomlkit.loads(toml)
         except tomlkit.exceptions.TOMLKitError as error:
-            raise GlobalLicensingParseError(str(error)) from error
+            raise GlobalLicensingParseError(
+                str(error), source=source
+            ) from error
         return cls.from_dict(tomldict, source)
 
     @classmethod
-    def from_file(cls, path: StrPath) -> "ReuseTOML":
-        with Path(path).open(encoding="utf-8") as fp:
-            return cls.from_toml(fp.read(), str(path))
+    def from_file(cls, path: StrPath, **kwargs: Any) -> "ReuseTOML":
+        try:
+            with Path(path).open(encoding="utf-8") as fp:
+                return cls.from_toml(fp.read(), str(path))
+        except UnicodeDecodeError as error:
+            raise GlobalLicensingParseError(
+                str(error), source=str(path)
+            ) from error
 
     def find_annotations_item(self, path: StrPath) -> Optional[AnnotationsItem]:
         """Find a :class:`AnnotationsItem` that matches *path*. The latest match
@@ -454,7 +459,7 @@ class ReuseTOML(GlobalLicensing):
 
     def reuse_info_of(
         self, path: StrPath
-    ) -> Dict[PrecedenceType, List[ReuseInfo]]:
+    ) -> dict[PrecedenceType, list[ReuseInfo]]:
         path = PurePath(path).as_posix()
         item = self.find_annotations_item(path)
         if item:
@@ -481,23 +486,33 @@ class ReuseTOML(GlobalLicensing):
 class NestedReuseTOML(GlobalLicensing):
     """A class that represents a hierarchy of :class:`ReuseTOML` objects."""
 
-    reuse_tomls: List[ReuseTOML] = attrs.field()
+    reuse_tomls: list[ReuseTOML] = attrs.field()
 
     @classmethod
-    def from_file(cls, path: StrPath) -> "GlobalLicensing":
+    def from_file(cls, path: StrPath, **kwargs: Any) -> "GlobalLicensing":
         """TODO: *path* is a directory instead of a file."""
+        include_submodules: bool = kwargs.get("include_submodules", False)
+        include_meson_subprojects: bool = kwargs.get(
+            "include_meson_subprojects", False
+        )
+        vcs_strategy: Optional[VCSStrategy] = kwargs.get("vcs_strategy")
         tomls = [
             ReuseTOML.from_file(toml_path)
-            for toml_path in cls.find_reuse_tomls(path)
+            for toml_path in cls.find_reuse_tomls(
+                path,
+                include_submodules=include_submodules,
+                include_meson_subprojects=include_meson_subprojects,
+                vcs_strategy=vcs_strategy,
+            )
         ]
         return cls(reuse_tomls=tomls, source=str(path))
 
     def reuse_info_of(
         self, path: StrPath
-    ) -> Dict[PrecedenceType, List[ReuseInfo]]:
+    ) -> dict[PrecedenceType, list[ReuseInfo]]:
         path = PurePath(path)
 
-        toml_items: List[Tuple[ReuseTOML, AnnotationsItem]] = (
+        toml_items: list[tuple[ReuseTOML, AnnotationsItem]] = (
             self._find_relevant_tomls_and_items(path)
         )
 
@@ -527,7 +542,7 @@ class NestedReuseTOML(GlobalLicensing):
         # Consider copyright and licensing separately.
         copyright_found = False
         licence_found = False
-        to_keep: List[ReuseInfo] = []
+        to_keep: list[ReuseInfo] = []
         for info in reversed(result[PrecedenceType.CLOSEST]):
             new_info = info.copy(copyright_lines=set(), spdx_expressions=set())
             if not copyright_found and info.copyright_lines:
@@ -547,17 +562,30 @@ class NestedReuseTOML(GlobalLicensing):
         return dict(result)
 
     @classmethod
-    def find_reuse_tomls(cls, path: StrPath) -> Generator[Path, None, None]:
+    def find_reuse_tomls(
+        cls,
+        path: StrPath,
+        include_submodules: bool = False,
+        include_meson_subprojects: bool = False,
+        vcs_strategy: Optional[VCSStrategy] = None,
+    ) -> Generator[Path, None, None]:
         """Find all REUSE.toml files in *path*."""
-        return Path(path).rglob("**/REUSE.toml")
+        return (
+            item
+            for item in iter_files(
+                path,
+                include_submodules=include_submodules,
+                include_meson_subprojects=include_meson_subprojects,
+                include_reuse_tomls=True,
+                vcs_strategy=vcs_strategy,
+            )
+            if item.name == "REUSE.toml"
+        )
 
-    def _find_relevant_tomls(self, path: StrPath) -> List[ReuseTOML]:
+    def _find_relevant_tomls(self, path: StrPath) -> list[ReuseTOML]:
         found = []
         for toml in self.reuse_tomls:
-            # TODO: When Python 3.8 is dropped, use is_relative_to instead.
-            with contextlib.suppress(ValueError):
-                PurePath(path).relative_to(toml.directory)
-                # No error.
+            if PurePath(path).is_relative_to(toml.directory):
                 found.append(toml)
         # Sort from topmost to deepest directory.
         found.sort(key=lambda toml: toml.directory.parts)
@@ -565,7 +593,7 @@ class NestedReuseTOML(GlobalLicensing):
 
     def _find_relevant_tomls_and_items(
         self, path: StrPath
-    ) -> List[Tuple[ReuseTOML, AnnotationsItem]]:
+    ) -> list[tuple[ReuseTOML, AnnotationsItem]]:
         # *path* is relative to the Project root, which is the *source* of
         # NestedReuseTOML, which itself is a relative (to CWD) or absolute
         # path.
@@ -573,7 +601,7 @@ class NestedReuseTOML(GlobalLicensing):
         adjusted_path = PurePath(self.source) / path
 
         tomls = self._find_relevant_tomls(adjusted_path)
-        toml_items: List[Tuple[ReuseTOML, AnnotationsItem]] = []
+        toml_items: list[tuple[ReuseTOML, AnnotationsItem]] = []
         for toml in tomls:
             relpath = adjusted_path.relative_to(toml.directory)
             item = toml.find_annotations_item(relpath)
