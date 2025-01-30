@@ -67,7 +67,8 @@ are the methods:
 
 - Placing tags in the header of the file.
 - Placing tags in a ``.license`` file adjacent to the file.
-- Putting the information in the ``REUSE.toml`` file.
+- Putting the information in a ``REUSE.toml`` file, which must be in an ancestor
+  directory relative to the file.
 - Putting the information in the ``.reuse/dep5`` file. (Deprecated)
 
 If a file is found that does not have copyright and/or license information
@@ -90,12 +91,12 @@ Options
 .. option:: -p, --plain
 
   Output the results of the lint as descriptive text. The text is valid
-  Markdown.
+  Markdown. This option is the default.
 
 .. option:: -l, --lines
 
   Output one line per error, prefixed by the file path.
 
-.. option:: -h, --help
+.. option:: --help
 
   Display help and exit.

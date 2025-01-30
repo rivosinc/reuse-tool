@@ -11,7 +11,9 @@ jobs=0
 
 disable=duplicate-code,
          logging-fstring-interpolation,
-         implicit-str-concat
+         implicit-str-concat,
+         inconsistent-quotes,
+         too-many-positional-arguments
 enable=useless-suppression
 
 [REPORTS]

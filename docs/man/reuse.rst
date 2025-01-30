@@ -1,6 +1,7 @@
 ..
   SPDX-FileCopyrightText: 2019 Free Software Foundation Europe e.V. <https://fsfe.org>
   SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
+  SPDX-FileCopyrightText: 2024 Emil Velikov <emil.l.velikov@gmail.com>
 
   SPDX-License-Identifier: CC-BY-SA-4.0
 
@@ -77,7 +78,7 @@ Options
   current working directory's VCS repository, or to the current working
   directory.
 
-.. option:: -h, --help
+.. option::  --help
 
   Display help and exit. If no command is provided, this option is implied.
 
@@ -99,6 +100,9 @@ Commands
 
 :manpage:`reuse-lint(1)`
   Verify whether a project is compliant with the REUSE Specification.
+
+:manpage:`reuse-lint-file(1)`
+  Verify whether individual files are compliant with the REUSE Specification.
 
 :manpage:`reuse-spdx(1)`
   Generate SPDX bill of materials.

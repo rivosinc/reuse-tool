@@ -16,26 +16,22 @@
 
 import logging
 import re
-from gettext import gettext as _
-from typing import NamedTuple, Optional, Sequence, Tuple, Type, cast
+from typing import NamedTuple, Optional, Sequence, Type, cast
 
 from boolean.boolean import ParseError
 from jinja2 import Environment, PackageLoader, Template
 from license_expression import ExpressionError
 
 from . import ReuseInfo
-from ._util import (
-    contains_reuse_info,
-    extract_reuse_info,
-    merge_copyright_lines,
-)
-from .comment import (
+from .comment import CommentStyle, EmptyCommentStyle, PythonCommentStyle
+from .copyright import merge_copyright_lines
+from .exceptions import (
     CommentCreateError,
     CommentParseError,
-    CommentStyle,
-    EmptyCommentStyle,
-    PythonCommentStyle,
+    MissingReuseInfoError,
 )
+from .extract import contains_reuse_info, extract_reuse_info
+from .i18n import _
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -53,10 +49,6 @@ class _TextSections(NamedTuple):
     after: str
 
 
-class MissingReuseInfo(Exception):
-    """Some REUSE information is missing from the result."""
-
-
 def _create_new_header(
     reuse_info: ReuseInfo,
     template: Optional[Template] = None,
@@ -68,7 +60,8 @@ def _create_new_header(
 
     Raises:
         CommentCreateError: if a comment could not be created.
-        MissingReuseInfo: if the generated comment is missing SPDX information.
+        MissingReuseInfoError: if the generated comment is missing SPDX
+            information.
     """
     if template is None:
         template = DEFAULT_TEMPLATE
@@ -101,7 +94,7 @@ def _create_new_header(
             )
         )
         _LOGGER.debug(result)
-        raise MissingReuseInfo()
+        raise MissingReuseInfoError()
 
     return result
 
@@ -125,7 +118,8 @@ def create_header(
 
     Raises:
         CommentCreateError: if a comment could not be created.
-        MissingReuseInfo: if the generated comment is missing SPDX information.
+        MissingReuseInfoError: if the generated comment is missing SPDX
+            information.
     """
     if template is None:
         template = DEFAULT_TEMPLATE
@@ -186,7 +180,7 @@ def _find_first_spdx_comment(
     preceding the comment, the comment itself, and everything following it.
 
     Raises:
-        MissingReuseInfo: if no REUSE info can be found in any comment
+        MissingReuseInfoError: if no REUSE info can be found in any comment.
     """
     if style is None:
         style = PythonCommentStyle
@@ -203,10 +197,10 @@ def _find_first_spdx_comment(
                 text[:index], comment + "\n", text[index + len(comment) + 1 :]
             )
 
-    raise MissingReuseInfo()
+    raise MissingReuseInfoError()
 
 
-def _extract_shebang(prefix: str, text: str) -> Tuple[str, str]:
+def _extract_shebang(prefix: str, text: str) -> tuple[str, str]:
     """Remove all lines that start with the shebang prefix from *text*. Return a
     tuple of (shebang, reduced_text).
     """
@@ -248,14 +242,15 @@ def find_and_replace_header(
 
     Raises:
         CommentCreateError: if a comment could not be created.
-        MissingReuseInfo: if the generated comment is missing SPDX information.
+        MissingReuseInfoError: if the generated comment is missing SPDX
+            information.
     """
     if style is None:
         style = PythonCommentStyle
 
     try:
         before, header, after = _find_first_spdx_comment(text, style=style)
-    except MissingReuseInfo:
+    except MissingReuseInfoError:
         before, header, after = "", "", text
 
     # Workaround. EmptyCommentStyle should always be completely replaced.

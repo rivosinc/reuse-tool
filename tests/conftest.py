@@ -21,13 +21,14 @@ import sys
 from inspect import cleandoc
 from io import StringIO
 from pathlib import Path
-from typing import Generator
+from typing import Generator, Optional
 from unittest.mock import create_autospec
 
 import pytest
 from jinja2 import Environment
 
 os.environ["LC_ALL"] = "C"
+os.environ["LANGUAGE"] = ""
 
 # A trick that tries to import the installed version of reuse. If that doesn't
 # work, import from the src directory. If that also doesn't work (for some
@@ -38,14 +39,9 @@ try:
 except ImportError:
     sys.path.append(os.path.join(Path(__file__).parent.parent, "src"))
 finally:
-    from reuse._util import (
-        GIT_EXE,
-        HG_EXE,
-        JUJUTSU_EXE,
-        PIJUL_EXE,
-        setup_logging,
-    )
+    from reuse._util import setup_logging
     from reuse.global_licensing import ReuseDep5
+    from reuse.vcs import GIT_EXE, HG_EXE, JUJUTSU_EXE, PIJUL_EXE
 
 CWD = Path.cwd()
 
@@ -65,6 +61,8 @@ cpython = pytest.mark.skipif(
     sys.implementation.name != "cpython", reason="only CPython supported"
 )
 git = pytest.mark.skipif(not GIT_EXE, reason="requires git")
+hg = pytest.mark.skipif(not HG_EXE, reason="requires mercurial")
+pijul = pytest.mark.skipif(not PIJUL_EXE, reason="requires pijul")
 no_root = pytest.mark.xfail(is_root, reason="fails when user is root")
 posix = pytest.mark.skipif(not is_posix, reason="Windows not supported")
 
@@ -107,12 +105,32 @@ def git_exe() -> str:
     return str(GIT_EXE)
 
 
+@pytest.fixture(params=[True, False])
+def optional_git_exe(
+    request, monkeypatch
+) -> Generator[Optional[str], None, None]:
+    """Run the test with or without git."""
+    exe = GIT_EXE if request.param else ""
+    monkeypatch.setattr("reuse.vcs.GIT_EXE", exe)
+    yield exe
+
+
 @pytest.fixture()
 def hg_exe() -> str:
     """Run the test with mercurial (hg)."""
     if not HG_EXE:
         pytest.skip("cannot run this test without mercurial")
     return str(HG_EXE)
+
+
+@pytest.fixture(params=[True, False])
+def optional_hg_exe(
+    request, monkeypatch
+) -> Generator[Optional[str], None, None]:
+    """Run the test with or without mercurial."""
+    exe = HG_EXE if request.param else ""
+    monkeypatch.setattr("reuse.vcs.HG_EXE", exe)
+    yield exe
 
 
 @pytest.fixture()
@@ -123,12 +141,32 @@ def jujutsu_exe() -> str:
     return str(JUJUTSU_EXE)
 
 
+@pytest.fixture(params=[True, False])
+def optional_jujutsu_exe(
+    request, monkeypatch
+) -> Generator[Optional[str], None, None]:
+    """Run the test with or without Jujutsu."""
+    exe = JUJUTSU_EXE if request.param else ""
+    monkeypatch.setattr("reuse.vcs.JUJUTSU_EXE", exe)
+    yield exe
+
+
 @pytest.fixture()
 def pijul_exe() -> str:
     """Run the test with Pijul."""
     if not PIJUL_EXE:
         pytest.skip("cannot run this test without pijul")
     return str(PIJUL_EXE)
+
+
+@pytest.fixture(params=[True, False])
+def optional_pijul_exe(
+    request, monkeypatch
+) -> Generator[Optional[str], None, None]:
+    """Run the test with or without Pijul."""
+    exe = PIJUL_EXE if request.param else ""
+    monkeypatch.setattr("reuse.vcs.PIJUL_EXE", exe)
+    yield exe
 
 
 @pytest.fixture(params=[True, False])
@@ -165,25 +203,6 @@ def fake_repository(tmpdir_factory) -> Path:
 
     # Get rid of those pesky pyc files.
     shutil.rmtree(directory / "src/__pycache__", ignore_errors=True)
-
-    # Adding this here to avoid conflict in main project.
-    (directory / "src/exception.py").write_text(
-        "SPDX-FileCopyrightText: 2017 Jane Doe\n"
-        "SPDX-License-Identifier: GPL-3.0-or-later WITH Autoconf-exception-3.0",
-        encoding="utf-8",
-    )
-    (directory / "src/custom.py").write_text(
-        "SPDX-FileCopyrightText: 2017 Jane Doe\n"
-        "SPDX-License-Identifier: LicenseRef-custom",
-        encoding="utf-8",
-    )
-    (directory / "src/multiple_licenses.rs").write_text(
-        "SPDX-FileCopyrightText: 2022 Jane Doe\n"
-        "SPDX-License-Identifier: GPL-3.0-or-later\n"
-        "SPDX-License-Identifier: Apache-2.0 OR CC0-1.0"
-        " WITH Autoconf-exception-3.0\n",
-        encoding="utf-8",
-    )
 
     os.chdir(directory)
     return directory
@@ -415,6 +434,35 @@ def submodule_repository(
     (git_repository / ".gitmodules.license").write_text(header)
 
     return git_repository
+
+
+@pytest.fixture()
+def subproject_repository(fake_repository: Path) -> Path:
+    """Add a Meson subproject to the fake repo."""
+    (fake_repository / "meson.build").write_text(
+        cleandoc(
+            """
+            SPDX-FileCopyrightText: 2022 Jane Doe
+            SPDX-License-Identifier: CC0-1.0
+            """
+        )
+    )
+    subprojects_dir = fake_repository / "subprojects"
+    subprojects_dir.mkdir()
+    libfoo_dir = subprojects_dir / "libfoo"
+    libfoo_dir.mkdir()
+    # ./subprojects/foo.wrap has license and linter succeeds
+    (subprojects_dir / "foo.wrap").write_text(
+        cleandoc(
+            """
+            SPDX-FileCopyrightText: 2022 Jane Doe
+            SPDX-License-Identifier: CC0-1.0
+            """
+        )
+    )
+    # ./subprojects/libfoo/foo.c misses license but is ignored
+    (libfoo_dir / "foo.c").write_text("foo")
+    return fake_repository
 
 
 @pytest.fixture(scope="session")
