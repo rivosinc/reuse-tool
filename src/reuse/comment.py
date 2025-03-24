@@ -6,7 +6,7 @@
 # SPDX-FileCopyrightText: 2021 Robin Vobruba <hoijui.quaero@gmail.com>
 # SPDX-FileCopyrightText: 2021-2022 Alliander N.V. <https://alliander.com>
 # SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
-# SPDX-FileCopyrightText: 2022 Florian Snow <florian@familysnow.net>
+# SPDX-FileCopyrightText: 2022, 2025 Florian Snow <florian@familysnow.net>
 # SPDX-FileCopyrightText: 2022 Nico Rikken <nico.rikken@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Sebastian Crane <seabass@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Stefan Hynek <stefan.hynek@uni-goettingen.de>
@@ -19,6 +19,7 @@
 # SPDX-FileCopyrightText: 2024 Rivos Inc.
 # SPDX-FileCopyrightText: 2024 Anthony Loiseau <anthony.loiseau@allcircuits.com>
 # SPDX-FileCopyrightText: 2025 Raphael Schlarb <info@raphael.schlarb.one>
+# SPDX-FileCopyrightText: 2025 Kiko Fernandez-Reyes <kiko@erlang.org>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -357,6 +358,7 @@ class CppSingleCommentStyle(CommentStyle):
 
     SINGLE_LINE = "//"
     INDENT_AFTER_SINGLE = " "
+    SHEBANGS = ["#!"]  # Gleam
 
 
 class EmptyCommentStyle(CommentStyle):
@@ -525,7 +527,7 @@ class TexCommentStyle(CommentStyle):
 
     SINGLE_LINE = "%"
     INDENT_AFTER_SINGLE = " "
-    SHEBANGS = ["% !TEX", "%!TEX"]
+    SHEBANGS = ["% !TEX", "%!TEX", "#!"]
 
 
 class UncommentableCommentStyle(EmptyCommentStyle):
@@ -634,6 +636,8 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".dtsi": CppCommentStyle,
     ".el": LispCommentStyle,
     ".erl": TexCommentStyle,
+    ".escript": TexCommentStyle,
+    ".es": TexCommentStyle,
     ".ex": PythonCommentStyle,
     ".exs": PythonCommentStyle,
     ".f": FortranCommentStyle,
@@ -654,6 +658,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".fsx": CppCommentStyle,
     ".ftl": FtlCommentStyle,
     ".gemspec": PythonCommentStyle,
+    ".gleam": CppSingleCommentStyle,
     ".go": CppCommentStyle,
     ".gperf": CppCommentStyle,
     ".gradle": CppCommentStyle,
@@ -826,11 +831,13 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".xqm": XQueryCommentStyle,
     ".xqy": XQueryCommentStyle,
     ".xquery": XQueryCommentStyle,
+    ".xrl": TexCommentStyle,
     ".xsd": HtmlCommentStyle,
     ".xsh": PythonCommentStyle,
     ".xsl": HtmlCommentStyle,
     ".yaml": PythonCommentStyle,
     ".yml": PythonCommentStyle,
+    ".yrl": TexCommentStyle,
     ".zig": CppSingleCommentStyle,
     ".zsh": PythonCommentStyle,
 }
