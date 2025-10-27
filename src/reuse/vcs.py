@@ -2,6 +2,7 @@
 # SPDX-FileCopyrightText: 2020 John Mulligan <jmulligan@redhat.com>
 # SPDX-FileCopyrightText: 2023 Markus Haug <korrat@proton.me>
 # SPDX-FileCopyrightText: 2024 Skyler Grey <sky@a.starrysky.fyi>
+# SPDX-FileCopyrightText: 2025 Jonas Fierlings <fnoegip@gmail.com>
 # SPDX-FileCopyrightText: © 2020 Liferay, Inc. <https://liferay.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
@@ -14,9 +15,10 @@ import logging
 import os
 import shutil
 from abc import ABC, abstractmethod
+from collections.abc import Generator
 from inspect import isclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Generator, Optional, Type
+from typing import TYPE_CHECKING
 
 from ._util import execute_command, relative_from_root
 from .types import StrPath
@@ -32,6 +34,18 @@ JUJUTSU_EXE = shutil.which("jj")
 PIJUL_EXE = shutil.which("pijul")
 
 
+def _find_ancestor(
+    directory: StrPath, ancestor: str, is_directory: bool = True
+) -> Path | None:
+    path = Path(directory).resolve()
+    for parent in [path] + list(path.parents):
+        if (parent / ancestor).is_dir() or (
+            (parent / ancestor).exists() and not is_directory
+        ):
+            return parent / ancestor
+    return None
+
+
 class VCSStrategy(ABC):
     """Strategy pattern for version control systems."""
 
@@ -41,7 +55,7 @@ class VCSStrategy(ABC):
         self.root = Path(root)
 
     @abstractmethod
-    def is_ignored(self, path: StrPath) -> bool:
+    def is_ignored(self, path: Path) -> bool:
         """Is *path* ignored by the VCS?"""
 
     @abstractmethod
@@ -59,7 +73,7 @@ class VCSStrategy(ABC):
 
     @classmethod
     @abstractmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         """Try to find the root of the project from *cwd*. If none is found,
         return None.
 
@@ -71,7 +85,7 @@ class VCSStrategy(ABC):
 class VCSStrategyNone(VCSStrategy):
     """Strategy that is used when there is no VCS."""
 
-    def is_ignored(self, path: StrPath) -> bool:
+    def is_ignored(self, path: Path) -> bool:
         return False
 
     def is_submodule(self, path: StrPath) -> bool:
@@ -82,7 +96,7 @@ class VCSStrategyNone(VCSStrategy):
         return False
 
     @classmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         return None
 
 
@@ -140,13 +154,13 @@ class VCSStrategyGit(VCSStrategy):
         # Each entry looks a little like 'submodule.submodule.path\nmy_path'.
         return {Path(entry.splitlines()[1]) for entry in submodule_entries}
 
-    def is_ignored(self, path: StrPath) -> bool:
+    def is_ignored(self, path: Path) -> bool:
         path = relative_from_root(path, self.root)
         return path in self._all_ignored_files
 
     def is_submodule(self, path: StrPath) -> bool:
         return any(
-            relative_from_root(path, self.root).resolve()
+            relative_from_root(Path(path), self.root).resolve()
             == submodule_path.resolve()
             for submodule_path in self._submodules
         )
@@ -156,18 +170,22 @@ class VCSStrategyGit(VCSStrategy):
         if not Path(directory).is_dir():
             raise NotADirectoryError()
 
-        command = [str(cls.EXE), "status"]
-        result = execute_command(command, _LOGGER, cwd=directory)
+        if _find_ancestor(directory, ".git", is_directory=False):
+            command = [str(cls.EXE), "rev-parse", "--is-inside-work-tree"]
+            result = execute_command(command, _LOGGER, cwd=directory)
 
-        return not result.returncode
+            return not result.returncode
+        return False
 
     @classmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         if cwd is None:
             cwd = Path.cwd()
 
         if not Path(cwd).is_dir():
             raise NotADirectoryError()
+        if not _find_ancestor(cwd, ".git", is_directory=False):
+            return None
 
         command = [str(cls.EXE), "rev-parse", "--show-toplevel"]
         result = execute_command(command, _LOGGER, cwd=cwd)
@@ -210,7 +228,7 @@ class VCSStrategyHg(VCSStrategy):
         all_files = result.stdout.decode("utf-8").split("\0")
         return {Path(file_) for file_ in all_files}
 
-    def is_ignored(self, path: StrPath) -> bool:
+    def is_ignored(self, path: Path) -> bool:
         path = relative_from_root(path, self.root)
         return path in self._all_ignored_files
 
@@ -223,18 +241,22 @@ class VCSStrategyHg(VCSStrategy):
         if not Path(directory).is_dir():
             raise NotADirectoryError()
 
-        command = [str(cls.EXE), "root"]
-        result = execute_command(command, _LOGGER, cwd=directory)
+        if _find_ancestor(directory, ".hg"):
+            command = [str(cls.EXE), "root"]
+            result = execute_command(command, _LOGGER, cwd=directory)
 
-        return not result.returncode
+            return not result.returncode
+        return False
 
     @classmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         if cwd is None:
             cwd = Path.cwd()
 
         if not Path(cwd).is_dir():
             raise NotADirectoryError()
+        if not _find_ancestor(cwd, ".hg"):
+            return None
 
         command = [str(cls.EXE), "root"]
         result = execute_command(command, _LOGGER, cwd=cwd)
@@ -261,12 +283,38 @@ class VCSStrategyJujutsu(VCSStrategy):
         """
         Return a set of all files tracked in the current jj revision
         """
-        command = [str(self.EXE), "files"]
+        version = self._version()
+        # TODO: Remove the version check once most distributions ship jj 0.19.0
+        # or higher.
+        if version is None or version >= (0, 19, 0):
+            command = [str(self.EXE), "file", "list"]
+        else:
+            command = [str(self.EXE), "files"]
         result = execute_command(command, _LOGGER, cwd=self.root)
         all_files = result.stdout.decode("utf-8").split("\n")
         return {Path(file_) for file_ in all_files if file_}
 
-    def is_ignored(self, path: StrPath) -> bool:
+    def _version(self) -> tuple[int, int, int] | None:
+        """
+        Returns the (major, minor, patch) version of the jujutsu executable,
+        or None if the version components cannot be determined.
+        """
+        result = execute_command(
+            [str(self.EXE), "--version"], _LOGGER, cwd=self.root
+        )
+        lines = result.stdout.decode("utf-8").split("\n")
+        # Output has the form `jj major.minor.patch[-hash]\n`.
+        try:
+            line = lines[0]
+            version = line.split(" ")[-1]
+            without_hash = version.split("-")[0]
+            components = without_hash.split(".")
+            return (int(components[0]), int(components[1]), int(components[2]))
+        except (IndexError, ValueError) as e:
+            _LOGGER.debug("unable to parse jj version: %s", e)
+            return None
+
+    def is_ignored(self, path: Path) -> bool:
         path = relative_from_root(path, self.root)
 
         for tracked in self._all_tracked_files:
@@ -288,18 +336,22 @@ class VCSStrategyJujutsu(VCSStrategy):
         if not Path(directory).is_dir():
             raise NotADirectoryError()
 
-        command = [str(cls.EXE), "root"]
-        result = execute_command(command, _LOGGER, cwd=directory)
+        if _find_ancestor(directory, ".jj"):
+            command = [str(cls.EXE), "root"]
+            result = execute_command(command, _LOGGER, cwd=directory)
 
-        return not result.returncode
+            return not result.returncode
+        return False
 
     @classmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         if cwd is None:
             cwd = Path.cwd()
 
         if not Path(cwd).is_dir():
             raise NotADirectoryError()
+        if not _find_ancestor(cwd, ".jj"):
+            return None
 
         command = [str(cls.EXE), "root"]
         result = execute_command(command, _LOGGER, cwd=cwd)
@@ -329,7 +381,7 @@ class VCSStrategyPijul(VCSStrategy):
         all_files = result.stdout.decode("utf-8").splitlines()
         return {Path(file_) for file_ in all_files}
 
-    def is_ignored(self, path: StrPath) -> bool:
+    def is_ignored(self, path: Path) -> bool:
         path = relative_from_root(path, self.root)
         return path not in self._all_tracked_files
 
@@ -342,13 +394,15 @@ class VCSStrategyPijul(VCSStrategy):
         if not Path(directory).is_dir():
             raise NotADirectoryError()
 
-        command = [str(cls.EXE), "diff", "--short"]
-        result = execute_command(command, _LOGGER, cwd=directory)
+        if _find_ancestor(directory, ".pijul"):
+            command = [str(cls.EXE), "diff", "--short"]
+            result = execute_command(command, _LOGGER, cwd=directory)
 
-        return not result.returncode
+            return not result.returncode
+        return False
 
     @classmethod
-    def find_root(cls, cwd: Optional[StrPath] = None) -> Optional[Path]:
+    def find_root(cls, cwd: StrPath | None = None) -> Path | None:
         if cwd is None:
             cwd = Path.cwd()
 
@@ -360,19 +414,13 @@ class VCSStrategyPijul(VCSStrategy):
         if not path.is_dir():
             raise NotADirectoryError()
 
-        while True:
-            if (path / ".pijul").is_dir():
-                return path
-
-            parent = path.parent
-            if parent == path:
-                # We reached the filesystem root
-                return None
-
-            path = parent
+        dot_pijul = _find_ancestor(path, ".pijul")
+        if dot_pijul is not None:
+            return dot_pijul.parent
+        return None
 
 
-def all_vcs_strategies() -> Generator[Type[VCSStrategy], None, None]:
+def all_vcs_strategies() -> Generator[type[VCSStrategy]]:
     """Yield all VCSStrategy classes that aren't the abstract base class."""
     for value in globals().values():
         if (
@@ -383,7 +431,7 @@ def all_vcs_strategies() -> Generator[Type[VCSStrategy], None, None]:
             yield value
 
 
-def find_root(cwd: Optional[StrPath] = None) -> Optional[Path]:
+def find_root(cwd: StrPath | None = None) -> Path | None:
     """Try to find the root of the project from *cwd*. If none is found,
     return None.
 

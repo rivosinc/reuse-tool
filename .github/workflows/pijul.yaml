@@ -3,7 +3,7 @@
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
-name: Test with Paijul
+name: Test with Pijul
 
 # These tests are run exclusively on the main branch to reduce CPU time wasted
 # on every single PR that very likely does not affect Pijul functionality.
@@ -36,4 +36,4 @@ jobs:
           pijul identity new --no-prompt --display-name 'Jane Doe' --email 'jdoe@example.com' 'jdoe'
       - name: Run tests with pytest
         run: |
-          poetry run pytest --cov=reuse
+          poetry run pytest -vv --cov=reuse

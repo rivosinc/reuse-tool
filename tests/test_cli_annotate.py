@@ -10,15 +10,18 @@
 
 """Tests for annotate."""
 
+import datetime
+import os
 import stat
 from inspect import cleandoc
 from pathlib import PurePath
+from unittest.mock import create_autospec
 
 import pytest
 from click.testing import CliRunner
 
 from reuse.cli.main import main
-from reuse.copyright import _COPYRIGHT_PREFIXES
+from reuse.copyright import CopyrightPrefix
 
 # pylint: disable=too-many-public-methods,too-many-lines,unused-argument
 
@@ -62,14 +65,14 @@ class TestAnnotate:
     def test_simple_scheme(self, fake_repository, mock_date_today):
         "Add a header to a Scheme file."
         simple_file = fake_repository / "foo.scm"
-        simple_file.write_text("#t")
+        simple_file.write_text("(setq show-trailing-whitespace t)")
         expected = cleandoc(
             """
             ;;; SPDX-FileCopyrightText: 2018 Jane Doe
             ;;;
             ;;; SPDX-License-Identifier: GPL-3.0-or-later
 
-            #t
+            (setq show-trailing-whitespace t)
             """
         )
 
@@ -387,6 +390,115 @@ class TestAnnotate:
                 "--license",
                 "GPL-3.0-or-later",
                 "foo.html",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert simple_file.read_text() == expected
+
+    def test_markdown(self, fake_repository):
+        """Markdown uses the HTML comment style."""
+        simple_file = fake_repository / "foo.md"
+        simple_file.write_text(
+            cleandoc(
+                """
+                # Heading
+                """
+            )
+        )
+        expected = cleandoc(
+            """
+            <!--
+            SPDX-License-Identifier: MIT
+            -->
+
+            # Heading
+            """
+        )
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--license",
+                "MIT",
+                "foo.md",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert simple_file.read_text() == expected
+
+    def test_frontmatter(self, fake_repository):
+        """Keep the frontmatter when annotating."""
+        simple_file = fake_repository / "foo.md"
+        simple_file.write_text(
+            cleandoc(
+                """
+                ---
+                description: test
+                ---
+                # Heading
+                """
+            )
+        )
+        expected = cleandoc(
+            """
+            ---
+            # SPDX-License-Identifier: MIT
+
+            description: test
+            ---
+            # Heading
+            """
+        )
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--license",
+                "MIT",
+                "foo.md",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert simple_file.read_text() == expected
+
+    def test_frontmatter_wrong_comment_style(self, fake_repository):
+        """If a comment style does not support the frontmatter header at the
+        top, don't treat the shebang as special.
+        """
+        simple_file = fake_repository / "foo.sh"
+        simple_file.write_text(
+            cleandoc(
+                """
+                ---
+                description: test
+                ---
+                # Heading
+                """
+            )
+        )
+        expected = cleandoc(
+            """
+            # SPDX-License-Identifier: MIT
+
+            ---
+            description: test
+            ---
+            # Heading
+            """
+        )
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--license",
+                "MIT",
+                "foo.sh",
             ],
         )
 
@@ -1385,9 +1497,8 @@ class TestAnnotate:
         )
 
         assert result.exit_code == 0
-        with open(simple_file, newline="", encoding="utf-8") as fp:
+        with open(simple_file, newline=line_ending, encoding="utf-8") as fp:
             contents = fp.read()
-
         assert contents == expected
 
     def test_skip_existing(self, fake_repository, mock_date_today):
@@ -1529,6 +1640,96 @@ class TestAnnotate:
         assert "foo.py" not in result.output
         assert "Jane Doe" not in (fake_repository / "baz/foo.py").read_text()
 
+    @pytest.mark.parametrize(
+        "year",
+        (
+            "abcd",
+            "123",
+            "12345",
+            "1234 until 5678",
+        ),
+    )
+    def test_wrong_year(self, empty_directory, year):
+        """If inputting a wrong value for --year, expect an error."""
+        (empty_directory / "foo.py").touch()
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--copyright",
+                "Jane Doe",
+                "--year",
+                year,
+                "foo.py",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert f"'{year}' is not a valid year range." in result.output
+
+    @pytest.mark.parametrize(
+        "year",
+        (
+            1,
+            12,
+            123,
+            # Five-digit values are not supported by datetime.
+        ),
+    )
+    def test_wrong_current_year(self, empty_directory, monkeypatch, year):
+        """In the rare event that the current year is not four digits, expect an
+        error.
+        """
+        date = create_autospec(datetime.date)
+        date.today.return_value = datetime.date(year, 1, 1)
+        monkeypatch.setattr(datetime, "date", date)
+        (empty_directory / "foo.py").touch()
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--copyright",
+                "Jane Doe",
+                "foo.py",
+            ],
+        )
+
+        assert result.exit_code != 0
+        assert (
+            f"Your operating system's year is set to '{year}'." in result.output
+        )
+
+    @pytest.mark.parametrize("encoding", ["utf_8_sig", "utf_16", "utf_32"])
+    def test_utf_bom(self, empty_directory, mock_date_today, encoding):
+        """If a file uses Unicode encoding with a BOM, preserve the BOM after
+        annotating the file.
+        """
+        (empty_directory / "foo.py").write_bytes("pass".encode(encoding))
+        CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--copyright",
+                "Jane Doe",
+                "foo.py",
+            ],
+        )
+
+        assert (
+            (empty_directory / "foo.py").read_bytes()
+            == cleandoc(
+                """
+                # SPDX-FileCopyrightText: 2018 Jane Doe
+
+                pass
+                """
+            )
+            .replace("\n", os.linesep)
+            .encode(encoding)
+        )
+
 
 class TestAnnotateMerge:
     """Test merging copyright statements."""
@@ -1570,8 +1771,6 @@ class TestAnnotateMerge:
                 "annotate",
                 "--year",
                 "2018",
-                "--license",
-                "GPL-3.0-or-later",
                 "--copyright",
                 "Mary Sue",
                 "--merge-copyrights",
@@ -1582,7 +1781,31 @@ class TestAnnotateMerge:
         assert result.exit_code == 0
         assert simple_file.read_text() == cleandoc(
             """
-                # SPDX-FileCopyrightText: 2016 - 2018 Mary Sue
+                # SPDX-FileCopyrightText: 2016, 2018 Mary Sue
+                #
+                # SPDX-License-Identifier: GPL-3.0-or-later
+
+                pass
+                """
+        )
+
+        result = CliRunner().invoke(
+            main,
+            [
+                "annotate",
+                "--year",
+                "2017",
+                "--copyright",
+                "Mary Sue",
+                "--merge-copyrights",
+                "foo.py",
+            ],
+        )
+
+        assert result.exit_code == 0
+        assert simple_file.read_text() == cleandoc(
+            """
+                # SPDX-FileCopyrightText: 2016-2018 Mary Sue
                 #
                 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -1633,19 +1856,19 @@ class TestAnnotateMerge:
 
         assert simple_file.read_text() == cleandoc(
             """
-                # Copyright (C) 2015 Mary Sue
-                # Copyright (C) 2016 Mary Sue
-                # Copyright (C) 2017 Mary Sue
-                # Copyright (C) 2018 Mary Sue
-                # Copyright (C) 2019 Mary Sue
-                # SPDX-FileCopyrightText: 2010 Mary Sue
-                # SPDX-FileCopyrightText: 2011 Mary Sue
-                # SPDX-FileCopyrightText: 2012 Mary Sue
-                #
-                # SPDX-License-Identifier: GPL-3.0-or-later
+            # SPDX-FileCopyrightText: 2010 Mary Sue
+            # SPDX-FileCopyrightText: 2011 Mary Sue
+            # SPDX-FileCopyrightText: 2012 Mary Sue
+            # Copyright (C) 2015 Mary Sue
+            # Copyright (C) 2016 Mary Sue
+            # Copyright (C) 2017 Mary Sue
+            # Copyright (C) 2018 Mary Sue
+            # Copyright (C) 2019 Mary Sue
+            #
+            # SPDX-License-Identifier: GPL-3.0-or-later
 
-                pass
-                """
+            pass
+            """
         )
 
         result = CliRunner().invoke(
@@ -1666,12 +1889,12 @@ class TestAnnotateMerge:
         assert result.exit_code == 0
         assert simple_file.read_text() == cleandoc(
             """
-                # Copyright (C) 2010 - 2019 Mary Sue
-                #
-                # SPDX-License-Identifier: GPL-3.0-or-later
+            # Copyright (C) 2010-2012, 2015-2019 Mary Sue
+            #
+            # SPDX-License-Identifier: GPL-3.0-or-later
 
-                pass
-                """
+            pass
+            """
         )
 
     def test_no_year_in_existing(self, fake_repository, mock_date_today):
@@ -1713,7 +1936,7 @@ class TestAnnotateMerge:
         # moment, and the whole copyright-line-as-string thing needs
         # overhauling.
         simple_file = fake_repository / "foo.py"
-        for copyright_prefix, copyright_string in _COPYRIGHT_PREFIXES.items():
+        for prefix in CopyrightPrefix:
             simple_file.write_text("pass")
             result = CliRunner().invoke(
                 main,
@@ -1726,7 +1949,7 @@ class TestAnnotateMerge:
                     "--copyright",
                     "Jane Doe",
                     "--copyright-style",
-                    copyright_prefix,
+                    CopyrightPrefix.lowercase_name(prefix.name),
                     "--merge-copyrights",
                     "foo.py",
                 ],
@@ -1734,7 +1957,7 @@ class TestAnnotateMerge:
             assert result.exit_code == 0
             assert simple_file.read_text(encoding="utf-8") == cleandoc(
                 f"""
-                    # {copyright_string} 2016 Jane Doe
+                    # {prefix.value} 2016 Jane Doe
                     #
                     # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -1753,7 +1976,7 @@ class TestAnnotateMerge:
                     "--copyright",
                     "Jane Doe",
                     "--copyright-style",
-                    copyright_prefix,
+                    CopyrightPrefix.lowercase_name(prefix.name),
                     "--merge-copyrights",
                     "foo.py",
                 ],
@@ -1761,12 +1984,12 @@ class TestAnnotateMerge:
             assert result.exit_code == 0
             assert simple_file.read_text(encoding="utf-8") == cleandoc(
                 f"""
-                    # {copyright_string} 2016 - 2018 Jane Doe
-                    #
-                    # SPDX-License-Identifier: GPL-3.0-or-later
+                # {prefix.value} 2016, 2018 Jane Doe
+                #
+                # SPDX-License-Identifier: GPL-3.0-or-later
 
-                    pass
-                    """
+                pass
+                """
             )
 
 

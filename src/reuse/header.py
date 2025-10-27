@@ -10,6 +10,7 @@
 # SPDX-FileCopyrightText: 2022 Yaman Qalieh
 # SPDX-FileCopyrightText: 2022 Carmen Bianca Bakker <carmenbianca@fsfe.org>
 # SPDX-FileCopyrightText: 2025 Rivos Inc.
+# SPDX-FileCopyrightText: 2025 Matthias Schoettle <opensource@mattsch.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -17,20 +18,19 @@
 
 import logging
 import re
-from typing import NamedTuple, Optional, Sequence, Type, cast
+from collections.abc import Sequence
+from typing import NamedTuple, cast
 
-from boolean.boolean import ParseError
 from jinja2 import Environment, PackageLoader, Template
-from license_expression import ExpressionError
 
-from . import ReuseInfo
-from .comment import CommentStyle, EmptyCommentStyle, PythonCommentStyle
-from .copyright import merge_copyright_lines
-from .exceptions import (
-    CommentCreateError,
-    CommentParseError,
-    MissingReuseInfoError,
+from .comment import (
+    CommentStyle,
+    EmptyCommentStyle,
+    HtmlCommentStyle,
+    PythonCommentStyle,
 )
+from .copyright import CopyrightNotice, ReuseInfo
+from .exceptions import CommentParseError, MissingReuseInfoError
 from .extract import contains_reuse_info, extract_reuse_info
 from .i18n import _
 
@@ -50,11 +50,21 @@ class _TextSections(NamedTuple):
     after: str
 
 
+class _FrontmatterCommentStyle(CommentStyle):
+    """Frontmatter comment style. Used specifically for e.g. Markdown."""
+
+    SHORTHAND = "frontmatter"
+
+    SINGLE_LINE = "#"
+    INDENT_AFTER_SINGLE = " "
+    SHEBANGS = ["---"]
+
+
 def _create_new_header(
     reuse_info: ReuseInfo,
-    template: Optional[Template] = None,
+    template: Template | None = None,
     template_is_commented: bool = False,
-    style: Optional[Type[CommentStyle]] = None,
+    style: type[CommentStyle] | None = None,
     force_multi: bool = False,
 ) -> str:
     """Format a new header from scratch.
@@ -67,10 +77,10 @@ def _create_new_header(
     if template is None:
         template = DEFAULT_TEMPLATE
     if style is None:
-        style = cast(Type[CommentStyle], PythonCommentStyle)
+        style = cast(type[CommentStyle], PythonCommentStyle)
 
     rendered = template.render(
-        copyright_lines=sorted(reuse_info.copyright_lines),
+        copyright_lines=map(str, sorted(reuse_info.copyright_notices)),
         contributor_lines=sorted(reuse_info.contributor_lines),
         spdx_expressions=sorted(map(str, reuse_info.spdx_expressions)),
     ).strip("\n")
@@ -85,7 +95,7 @@ def _create_new_header(
     # Verify that the result contains all ReuseInfo.
     new_reuse_info = extract_reuse_info(result)
     if (
-        reuse_info.copyright_lines != new_reuse_info.copyright_lines
+        reuse_info.copyright_notices != new_reuse_info.copyright_notices
         and reuse_info.spdx_expressions != new_reuse_info.spdx_expressions
     ):
         _LOGGER.debug(
@@ -103,10 +113,10 @@ def _create_new_header(
 # pylint: disable=too-many-arguments
 def create_header(
     reuse_info: ReuseInfo,
-    header: Optional[str] = None,
-    template: Optional[Template] = None,
+    header: str | None = None,
+    template: Template | None = None,
     template_is_commented: bool = False,
-    style: Optional[Type[CommentStyle]] = None,
+    style: type[CommentStyle] | None = None,
     force_multi: bool = False,
     merge_copyrights: bool = False,
 ) -> str:
@@ -129,25 +139,21 @@ def create_header(
 
     new_header = ""
     if header:
-        try:
-            existing_spdx = extract_reuse_info(header)
-        except (ExpressionError, ParseError) as err:
-            raise CommentCreateError(
-                "existing header contains an erroneous SPDX expression"
-            ) from err
-
+        existing_spdx = extract_reuse_info(header)
         if merge_copyrights:
-            spdx_copyrights = merge_copyright_lines(
-                reuse_info.copyright_lines.union(existing_spdx.copyright_lines),
+            spdx_copyrights = CopyrightNotice.merge(
+                reuse_info.copyright_notices.union(
+                    existing_spdx.copyright_notices
+                )
             )
         else:
-            spdx_copyrights = reuse_info.copyright_lines.union(
-                existing_spdx.copyright_lines
+            spdx_copyrights = reuse_info.copyright_notices.union(
+                existing_spdx.copyright_notices
             )
 
         # TODO: This behaviour does not match the docstring.
         reuse_info = existing_spdx | reuse_info
-        reuse_info = reuse_info.copy(copyright_lines=spdx_copyrights)
+        reuse_info = reuse_info.copy(copyright_notices=spdx_copyrights)
 
     new_header += _create_new_header(
         reuse_info,
@@ -175,7 +181,7 @@ def _indices_of_newlines(text: str) -> Sequence[int]:
 
 
 def _find_first_spdx_comment(
-    text: str, style: Optional[Type[CommentStyle]] = None
+    text: str, style: type[CommentStyle] | None = None
 ) -> _TextSections:
     """Find the first SPDX comment in the file. Return a tuple with everything
     preceding the comment, the comment itself, and everything following it.
@@ -217,14 +223,19 @@ def _extract_shebang(prefix: str, text: str) -> tuple[str, str]:
 
 
 def place_header(
-    header: str, before: str, after: str, has_existing_header: bool
+    header: str,
+    before: str,
+    after: str,
+    has_existing_header: bool,
+    double_newline_after_before: bool = True,
 ) -> str:
     """Construct the resulting file with the header and the rest of the text
     in the file.
     """
     new_text = f"{header}\n"
     if before.strip():
-        new_text = f"{before.rstrip()}\n\n{new_text}"
+        newlines = "\n\n" if double_newline_after_before else "\n"
+        new_text = f"{before.rstrip()}{newlines}{new_text}"
     if after.strip():
         # Create space between header and following code only if a newline
         # doesn't already exist, and there wasn't previously a header.
@@ -241,9 +252,9 @@ def place_header(
 def find_and_replace_header(
     text: str,
     reuse_info: ReuseInfo,
-    template: Optional[Template] = None,
+    template: Template | None = None,
     template_is_commented: bool = False,
-    style: Optional[Type[CommentStyle]] = None,
+    style: type[CommentStyle] | None = None,
     force_multi: bool = False,
     merge_copyrights: bool = False,
 ) -> str:
@@ -269,6 +280,12 @@ def find_and_replace_header(
     """
     if style is None:
         style = PythonCommentStyle
+
+    # Workaround: Treat Markdown files with frontmatter with the Frontmatter
+    # style instead.
+    frontmatter = text.startswith("---")
+    if style is HtmlCommentStyle and frontmatter:
+        style = _FrontmatterCommentStyle
 
     try:
         before, header, after = _find_first_spdx_comment(text, style=style)
@@ -307,16 +324,22 @@ def find_and_replace_header(
         merge_copyrights=merge_copyrights,
     )
 
-    return place_header(new_header, before, after, bool(header))
+    return place_header(
+        new_header,
+        before,
+        after,
+        bool(header),
+        double_newline_after_before=not frontmatter,
+    )
 
 
 # pylint: disable=too-many-arguments
 def add_new_header(
     text: str,
     reuse_info: ReuseInfo,
-    template: Optional[Template] = None,
+    template: Template | None = None,
     template_is_commented: bool = False,
-    style: Optional[Type[CommentStyle]] = None,
+    style: type[CommentStyle] | None = None,
     force_multi: bool = False,
     merge_copyrights: bool = False,
 ) -> str:

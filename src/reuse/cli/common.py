@@ -4,15 +4,15 @@
 
 """Utilities that are common to multiple CLI commands."""
 
-from dataclasses import dataclass, field
+from collections.abc import Mapping
+from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 import click
-from boolean.boolean import Expression, ParseError
-from license_expression import ExpressionError
 
-from .. import _LICENSING
+from ..copyright import SpdxExpression
 from ..exceptions import GlobalLicensingConflictError, GlobalLicensingParseError
 from ..i18n import _
 from ..project import Project
@@ -23,21 +23,14 @@ from ..vcs import find_root
 class ClickObj:
     """A dataclass holding necessary context and options."""
 
-    root: Optional[Path] = None
+    root: Path | None = None
     include_submodules: bool = False
     include_meson_subprojects: bool = False
     no_multiprocessing: bool = True
 
-    _project: Optional[Project] = field(
-        default=None, init=False, repr=False, compare=False
-    )
-
-    @property
+    @cached_property
     def project(self) -> Project:
-        """Generate a project object on demand, and cache it."""
-        if self._project:
-            return self._project
-
+        """Generate a project object on demand."""
         root = self.root
         if root is None:
             root = find_root()
@@ -45,7 +38,7 @@ class ClickObj:
             root = Path.cwd()
 
         try:
-            project = Project.from_directory(
+            return Project.from_directory(
                 root,
                 include_submodules=self.include_submodules,
                 include_meson_subprojects=self.include_meson_subprojects,
@@ -62,9 +55,6 @@ class ClickObj:
 
         except (GlobalLicensingConflictError, OSError) as error:
             raise click.UsageError(str(error)) from error
-
-        self._project = project
-        return project
 
 
 class MutexOption(click.Option):
@@ -85,7 +75,7 @@ class MutexOption(click.Option):
         For example, 'output' return '--output'.
         """
         param = next(
-            (param for param in ctx.command.params if param.name == name)
+            param for param in ctx.command.params if param.name == name
         )
         return param.opts[0]
 
@@ -105,11 +95,11 @@ class MutexOption(click.Option):
         return super().handle_parse_result(ctx, opts, args)
 
 
-def spdx_identifier(text: str) -> Expression:
+def spdx_identifier(text: str) -> SpdxExpression:
     """Factory for creating SPDX expressions."""
-    try:
-        return _LICENSING.parse(text)
-    except (ExpressionError, ParseError) as error:
+    expression = SpdxExpression(text)
+    if not expression.is_valid:
         raise click.UsageError(
             _("'{}' is not a valid SPDX expression.").format(text)
-        ) from error
+        )
+    return expression

@@ -31,7 +31,7 @@ try:
     # The full version, including alpha/beta/rc tags.
     release = get_version("reuse")
 except PackageNotFoundError:
-    release = "5.0.2"
+    release = "6.1.2"
 
 # The short X.Y.Z version.
 version = ".".join(release.split(".")[:3])
@@ -70,6 +70,9 @@ apidoc_extra_args = ["--maxdepth", "2"]
 autodoc_member_order = "bysource"
 
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
+
+# Auto-generate header anchors up to 3 headings deep.
+myst_heading_anchors = 3
 
 # -- Options for HTML output -------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#options-for-html-output

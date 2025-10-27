@@ -20,7 +20,7 @@ import subprocess
 from hashlib import sha1
 from inspect import cleandoc
 from pathlib import Path
-from typing import IO, Any, Optional, Union
+from typing import IO, Any
 
 from .types import StrPath
 
@@ -47,7 +47,7 @@ def setup_logging(level: int = logging.WARNING) -> None:
 def execute_command(
     command: list[str],
     logger: logging.Logger,
-    cwd: Optional[StrPath] = None,
+    cwd: StrPath | None = None,
     **kwargs: Any,
 ) -> subprocess.CompletedProcess:
     """Run the given command with subprocess.run. Forward kwargs. Silence
@@ -55,8 +55,8 @@ def execute_command(
     """
     logger.debug("running '%s'", " ".join(command))
 
-    stdout: Union[None, int, IO[Any]] = kwargs.get("stdout", subprocess.PIPE)
-    stderr: Union[None, int, IO[Any]] = kwargs.get("stderr", subprocess.PIPE)
+    stdout: None | int | IO[Any] = kwargs.get("stdout", subprocess.PIPE)
+    stderr: None | int | IO[Any] = kwargs.get("stderr", subprocess.PIPE)
 
     return subprocess.run(
         list(map(str, command)),
@@ -68,7 +68,7 @@ def execute_command(
     )
 
 
-def find_licenses_directory(root: Optional[StrPath] = None) -> Path:
+def find_licenses_directory(root: StrPath | None = None) -> Path:
     """Find the licenses directory from CWD or *root*. In the following order:
 
     - LICENSES/ in *root*.
@@ -135,13 +135,16 @@ def _add_plus_to_identifier(spdx_identifier: str) -> str:
     return f"{spdx_identifier}+"
 
 
-def relative_from_root(path: StrPath, root: StrPath) -> Path:
+def relative_from_root(path: Path, root: Path) -> Path:
     """A helper function to get *path* relative to *root*."""
-    path = Path(path)
-    try:
-        return path.relative_to(root)
-    except ValueError:
-        return Path(os.path.relpath(path, start=root))
+    path_parts = path.parts
+    root_parts = root.parts
+    root_parts_len = len(root_parts)
+
+    # This is rather strangely more performant than `path.relative_to(root)`.
+    if path_parts[:root_parts_len] == root_parts:
+        return Path(*path_parts[root_parts_len:])
+    return Path(os.path.relpath(str(path), start=str(root)))
 
 
 def _checksum(path: StrPath) -> str:

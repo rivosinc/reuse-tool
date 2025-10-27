@@ -10,10 +10,12 @@ the reports and printing some conclusions.
 """
 
 import json
+from collections import defaultdict
 from io import StringIO
+from itertools import chain
 from pathlib import Path
 from textwrap import TextWrapper
-from typing import Any, Optional
+from typing import Any
 
 from . import __REUSE_version__
 from .i18n import _
@@ -36,11 +38,12 @@ def format_plain(report: ProjectReport) -> str:
         # Bad licenses
         if report.bad_licenses:
             output.write("# " + _("BAD LICENSES") + "\n\n")
-            for lic, files in sorted(report.bad_licenses.items()):
-                output.write(_("'{}' found in:").format(lic) + "\n")
-                for file in sorted(files):
-                    output.write(f"* {file}\n")
-            output.write("\n\n")
+            output.write(
+                _("The following licenses are not valid SPDX licenses:") + "\n"
+            )
+            for path in sorted(report.bad_licenses.values()):
+                output.write(f"* {path}\n")
+            output.write("\n")
 
         # Deprecated licenses
         if report.deprecated_licenses:
@@ -50,7 +53,7 @@ def format_plain(report: ProjectReport) -> str:
             )
             for lic in sorted(report.deprecated_licenses):
                 output.write(f"* {lic}\n")
-            output.write("\n\n")
+            output.write("\n")
 
         # Licenses without extension
         if report.licenses_without_extension:
@@ -60,7 +63,7 @@ def format_plain(report: ProjectReport) -> str:
             )
             for lic in sorted(report.licenses_without_extension):
                 output.write(f"* {lic}\n")
-            output.write("\n\n")
+            output.write("\n")
 
         # Missing licenses
         if report.missing_licenses:
@@ -69,7 +72,7 @@ def format_plain(report: ProjectReport) -> str:
                 output.write(_("'{}' found in:").format(lic) + "\n")
                 for file in sorted(files):
                     output.write(f"* {file}\n")
-            output.write("\n\n")
+            output.write("\n")
 
         # Unused licenses
         if report.unused_licenses:
@@ -77,7 +80,7 @@ def format_plain(report: ProjectReport) -> str:
             output.write(_("The following licenses are not used:") + "\n")
             for lic in sorted(report.unused_licenses):
                 output.write(f"* {lic}\n")
-            output.write("\n\n")
+            output.write("\n")
 
         # Read errors
         if report.read_errors:
@@ -85,7 +88,22 @@ def format_plain(report: ProjectReport) -> str:
             output.write(_("Could not read:") + "\n")
             for path in sorted(report.read_errors):
                 output.write(f"* {path}\n")
-            output.write("\n\n")
+            output.write("\n")
+
+        if report.invalid_spdx_expressions:
+            output.write("# " + _("INVALID SPDX LICENSE EXPRESSIONS") + "\n\n")
+            for path, expressions in sorted(
+                report.invalid_spdx_expressions.items()
+            ):
+                output.write(
+                    _("'{}' contains invalid SPDX License Expressions:").format(
+                        path
+                    )
+                    + "\n"
+                )
+                for expression in sorted(expressions):
+                    output.write(f"* {expression}\n")
+            output.write("\n")
 
         # Missing copyright and licensing information
         files_without_both = report.files_without_copyright.intersection(
@@ -141,15 +159,26 @@ def format_plain(report: ProjectReport) -> str:
 
     total_files = len(report.file_reports)
     summary_contents = {
-        _("Bad licenses:"): ", ".join(report.bad_licenses),
-        _("Deprecated licenses:"): ", ".join(report.deprecated_licenses),
-        _("Licenses without file extension:"): ", ".join(
-            report.licenses_without_extension
+        _("Bad licenses:"): ", ".join(sorted(report.bad_licenses)),
+        _("Deprecated licenses:"): ", ".join(
+            sorted(report.deprecated_licenses)
         ),
-        _("Missing licenses:"): ", ".join(report.missing_licenses),
-        _("Unused licenses:"): ", ".join(report.unused_licenses),
-        _("Used licenses:"): ", ".join(report.used_licenses),
+        _("Licenses without file extension:"): ", ".join(
+            sorted(report.licenses_without_extension)
+        ),
+        _("Missing licenses:"): ", ".join(sorted(report.missing_licenses)),
+        _("Unused licenses:"): ", ".join(sorted(report.unused_licenses)),
+        _("Used licenses:"): ", ".join(sorted(report.used_licenses)),
         _("Read errors:"): str(len(report.read_errors)),
+        _("Invalid SPDX License Expressions:"): str(
+            len(
+                list(
+                    chain.from_iterable(
+                        report.invalid_spdx_expressions.values()
+                    )
+                )
+            )
+        ),
         _(
             "Files with copyright information:"
         ): f"{total_files - len(report.files_without_copyright)}"
@@ -237,35 +266,61 @@ def format_json(report: ProjectReport) -> str:
     )
 
 
-def format_lines_subset(report: ProjectReportSubsetProtocol) -> str:
-    """Formats a subset of a report, namely missing licenses, read errors, files
-    without licenses, and files without copyright.
-
-    Args:
-        report: A populated report.
-    """
+def _output_lines_dict(format_dict: dict[str, list[str]]) -> str:
     output = StringIO()
+    for path, items in sorted(format_dict.items()):
+        for item in items:
+            output.write(f"{path}: {item}\n")
+    return output.getvalue()
+
+
+def _format_lines_subset_dict(
+    report: ProjectReportSubsetProtocol,
+) -> defaultdict[str, list[str]]:
+    result_dict = defaultdict(list)
 
     # Missing licenses
     for lic, files in sorted(report.missing_licenses.items()):
-        for path in sorted(files):
-            output.write(
-                _("{path}: missing license {lic}\n").format(path=path, lic=lic)
+        for path in files:
+            result_dict[str(path)].append(
+                _("missing license '{lic}'").format(lic=lic)
             )
 
     # Read errors
-    for path in sorted(report.read_errors):
-        output.write(_("{path}: read error\n").format(path=path))
+    for path in report.read_errors:
+        result_dict[str(path)].append(_("read error").format(path=path))
+
+    for path, expressions in report.invalid_spdx_expressions.items():
+        for expression in sorted(expressions):
+            result_dict[str(path)].append(
+                _("invalid SPDX License Expression '{expression}'").format(
+                    expression=expression
+                )
+            )
 
     # Without licenses
     for path in report.files_without_licenses:
-        output.write(_("{path}: no license identifier\n").format(path=path))
+        result_dict[str(path)].append(_("no license identifier"))
 
     # Without copyright
     for path in report.files_without_copyright:
-        output.write(_("{path}: no copyright notice\n").format(path=path))
+        result_dict[str(path)].append(_("no copyright notice"))
 
-    return output.getvalue()
+    return result_dict
+
+
+def format_lines_subset(report: ProjectReportSubsetProtocol) -> str:
+    """Formats a subset of a report, namely missing licenses, read errors,
+    invalid SPDX License Expressions, files without licenses, and files without
+    copyright.
+
+    Args:
+        report: A populated report.
+
+    Returns:
+        String (in plaintext) that can be output to sys.stdout
+    """
+    return _output_lines_dict(_format_lines_subset_dict(report))
 
 
 def format_lines(report: ProjectReport) -> str:
@@ -278,45 +333,34 @@ def format_lines(report: ProjectReport) -> str:
     Returns:
         String (in plaintext) that can be output to sys.stdout
     """
-    output = StringIO()
 
-    def license_path(lic: str) -> Optional[Path]:
+    def license_path(lic: str) -> str:
         """Resolve a license identifier to a license path."""
-        return report.licenses.get(lic)
+        return str(report.licenses.get(lic))
 
-    subset_output = ""
-    if not report.is_compliant:
-        # Bad licenses
-        for lic, files in sorted(report.bad_licenses.items()):
-            for path in sorted(files):
-                output.write(
-                    _("{path}: bad license {lic}\n").format(path=path, lic=lic)
-                )
+    result_dict: defaultdict[str, list[str]] = defaultdict(list)
 
-        # Deprecated licenses
-        for lic in sorted(report.deprecated_licenses):
-            lic_path = license_path(lic)
-            output.write(
-                _("{lic_path}: deprecated license\n").format(lic_path=lic_path)
-            )
+    # Bad licenses
+    for lic, path in report.bad_licenses.items():
+        result_dict[str(path)].append(_("bad license '{lic}'").format(lic=lic))
 
-        # Licenses without extension
-        for lic in sorted(report.licenses_without_extension):
-            lic_path = license_path(lic)
-            output.write(
-                _("{lic_path}: license without file extension\n").format(
-                    lic_path=lic_path
-                )
-            )
+    # Deprecated licenses
+    for lic in report.deprecated_licenses:
+        lic_path = license_path(lic)
+        result_dict[lic_path].append(_("deprecated license"))
 
-        # Unused licenses
-        for lic in sorted(report.unused_licenses):
-            lic_path = license_path(lic)
-            output.write(
-                _("{lic_path}: unused license\n").format(lic_path=lic_path)
-            )
+    # Licenses without extension
+    for lic in report.licenses_without_extension:
+        lic_path = license_path(lic)
+        result_dict[lic_path].append(_("license without file extension"))
 
-        # Everything else.
-        subset_output = format_lines_subset(report)
+    # Unused licenses
+    for lic in report.unused_licenses:
+        lic_path = license_path(lic)
+        result_dict[lic_path].append(_("unused license"))
 
-    return output.getvalue() + subset_output
+    subset_dict = _format_lines_subset_dict(report)
+    for key, value in subset_dict.items():
+        result_dict[key].extend(value)
+
+    return _output_lines_dict(result_dict)

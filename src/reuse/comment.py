@@ -10,6 +10,7 @@
 # SPDX-FileCopyrightText: 2022 Nico Rikken <nico.rikken@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Sebastian Crane <seabass@fsfe.org>
 # SPDX-FileCopyrightText: 2022 Stefan Hynek <stefan.hynek@uni-goettingen.de>
+# SPDX-FileCopyrightText: 2022 Arnouet Engelen
 # SPDX-FileCopyrightText: 2023 Juelich Supercomputing Centre, Forschungszentrum Juelich GmbH
 # SPDX-FileCopyrightText: 2023 Kevin Meagher
 # SPDX-FileCopyrightText: 2023 Mathias Dannesbo <md@magenta.dk>
@@ -18,10 +19,22 @@
 # SPDX-FileCopyrightText: 2023 Shun Sakai <sorairolake@protonmail.ch>
 # SPDX-FileCopyrightText: 2024 Rivos Inc.
 # SPDX-FileCopyrightText: 2024 Anthony Loiseau <anthony.loiseau@allcircuits.com>
+# SPDX-FileCopyrightText: 2024 Yongmin Hong <yewon@revi.email>
 # SPDX-FileCopyrightText: 2025 Raphael Schlarb <info@raphael.schlarb.one>
+# SPDX-FileCopyrightText: 2025 András Nagy <nagyandris0718@gmail.com>
 # SPDX-FileCopyrightText: 2025 Kiko Fernandez-Reyes <kiko@erlang.org>
+# SPDX-FileCopyrightText: 2025 Hatzka <hatzka@nezumi.studio>
+# SPDX-FileCopyrightText: 2025 Johannes HAMPP <johannes.hampp@openenergytransition.org>
+# SPDX-FileCopyrightText: 2025 Simon Barth <simon.barth@gmx.de>
+# SPDX-FileCopyrightText: 2025 Maximilian Franzke <mfr@nzke.net>
+# SPDX-FileCopyrightText: 2025 Sacha-Élie Ayoun <sachaayoun@gmail.com>
+# SPDX-FileCopyrightText: 2025 Thomas Gilon <thomas.gilon@openenergytransition.org>
+# SPDX-FileCopyrightText: 2025 Manlio Perillo <manlio.perillo@gmail.com>
+# SPDX-FileCopyrightText: 2025 Matthias Schoettle <opensource@mattsch.com>
 #
 # SPDX-License-Identifier: GPL-3.0-or-later
+
+# pylint: disable=too-many-lines
 
 """Module for parsing and creating comments. Just enough to deal with comment
 headers, in any case.
@@ -32,7 +45,7 @@ import operator
 import re
 from pathlib import Path
 from textwrap import dedent
-from typing import NamedTuple, Optional, Type, cast
+from typing import NamedTuple
 
 from .exceptions import CommentCreateError, CommentParseError
 from .types import StrPath
@@ -41,8 +54,8 @@ _LOGGER = logging.getLogger(__name__)
 
 
 class MultiLineSegments(NamedTuple):
-    """Components that make up a multi-line comment style, e.g. '/*', '*', and
-    '*/'.
+    """Components that make up a multi-line comment style, e.g. ``'/*'``,
+    ``'*'``, and ``'*/'``.
     """
 
     start: str
@@ -55,7 +68,7 @@ class CommentStyle:
 
     SHORTHAND = ""
     SINGLE_LINE = ""
-    SINGLE_LINE_REGEXP: Optional[re.Pattern] = None
+    SINGLE_LINE_REGEXP: re.Pattern | None = None
     INDENT_AFTER_SINGLE = ""
     # (start, middle, end)
     # e.g., ("/*", "*", "*/")
@@ -256,7 +269,7 @@ class CommentStyle:
             raise CommentParseError(f"{cls} cannot parse comments")
 
         lines = text.splitlines()
-        end: Optional[int] = None
+        end: int | None = None
 
         if cls.can_handle_single():
             for i, line in enumerate(lines):
@@ -321,6 +334,14 @@ class BibTexCommentStyle(CommentStyle):
 
     MULTI_LINE = MultiLineSegments("@Comment{", "", "}")
     SHEBANGS = ["% !BIB", "%!BIB"]
+
+
+class BladeCommentStyle(CommentStyle):
+    """Laravel Blade Template comment style."""
+
+    _shorthand = "blade"
+
+    MULTI_LINE = MultiLineSegments("{{--", "", "--}}")
 
 
 class CCommentStyle(CommentStyle):
@@ -447,6 +468,19 @@ class JuliaCommentStyle(CommentStyle):
     INDENT_AFTER_SINGLE = " "
     MULTI_LINE = MultiLineSegments("#=", "", "=#")
     SHEBANGS = ["#!"]
+
+
+class LeanCommentStyle(CommentStyle):
+    """Lean comment style."""
+
+    SHORTHAND = "lean"
+
+    SINGLE_LINE = "--"
+    INDENT_AFTER_SINGLE = " "
+    MULTI_LINE = MultiLineSegments("/-", "-", "-/")
+    INDENT_BEFORE_MIDDLE = " "
+    INDENT_AFTER_MIDDLE = " "
+    INDENT_BEFORE_END = " "
 
 
 class LispCommentStyle(CommentStyle):
@@ -603,6 +637,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".bbappend": PythonCommentStyle,
     ".bbclass": PythonCommentStyle,
     ".bib": BibTexCommentStyle,
+    ".blade.php": BladeCommentStyle,
     ".bzl": PythonCommentStyle,
     ".c": CCommentStyle,
     ".cabal": HaskellCommentStyle,
@@ -632,6 +667,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".doc": UncommentableCommentStyle,
     ".docx": UncommentableCommentStyle,
     ".dotx": UncommentableCommentStyle,
+    ".dtd": HtmlCommentStyle,
     ".dts": CppCommentStyle,
     ".dtsi": CppCommentStyle,
     ".el": LispCommentStyle,
@@ -678,6 +714,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".html": HtmlCommentStyle,
     ".hx": CppCommentStyle,
     ".hxsl": CppCommentStyle,
+    ".ilean": UncommentableCommentStyle,
     ".ini": SemicolonCommentStyle,
     ".ino": CppCommentStyle,
     ".ipynb": UncommentableCommentStyle,
@@ -702,6 +739,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".l": LispCommentStyle,
     ".latex": TexCommentStyle,
     ".ld": CCommentStyle,
+    ".lean": LeanCommentStyle,
     ".less": CCommentStyle,
     ".license": EmptyCommentStyle,
     ".lisp": LispCommentStyle,
@@ -716,8 +754,8 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".mk": PythonCommentStyle,
     ".ml": MlCommentStyle,
     ".mli": MlCommentStyle,
-    ".nim.cfg": PythonCommentStyle,  # Nim-lang build config parameters/settings
     ".nim": PythonCommentStyle,
+    ".nim.cfg": PythonCommentStyle,  # Nim-lang build config parameters/settings
     ".nimble": PythonCommentStyle,  # Nim-lang build config
     ".nimrod": PythonCommentStyle,
     ".nix": PythonCommentStyle,
@@ -728,6 +766,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     ".odp": UncommentableCommentStyle,
     ".ods": UncommentableCommentStyle,
     ".odt": UncommentableCommentStyle,
+    ".olean": UncommentableCommentStyle,
     ".org": PythonCommentStyle,
     ".otp": UncommentableCommentStyle,
     ".ots": UncommentableCommentStyle,
@@ -791,6 +830,7 @@ EXTENSION_COMMENT_STYLE_MAP = {
     # Visual Studio solution file, officially uncommentable:
     ".sln": UncommentableCommentStyle,
     ".sls": LispCommentStyle,  # Scheme Library Source (R6RS)
+    ".smk": PythonCommentStyle,
     ".sml": MlCommentStyle,
     ".soy": CppCommentStyle,
     ".sps": LispCommentStyle,  # Scheme Program Source (R6RS)
@@ -847,6 +887,9 @@ EXTENSION_COMMENT_STYLE_MAP_LOWERCASE = {
 }
 
 FILENAME_COMMENT_STYLE_MAP = {
+    ".arcconfig": UncommentableCommentStyle,  # is a JSON file
+    ".arclint": UncommentableCommentStyle,  # is a JSON file
+    ".arcunit": UncommentableCommentStyle,  # is a JSON file
     ".bashrc": PythonCommentStyle,
     ".bazelignore": PythonCommentStyle,
     ".bazelrc": PythonCommentStyle,
@@ -870,6 +913,7 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".mdlrc": PythonCommentStyle,  # Markdown-linter config
     ".npmignore": PythonCommentStyle,
     ".npmrc": SemicolonCommentStyle,
+    ".nvmrc": PythonCommentStyle,
     ".prettierrc": UncommentableCommentStyle,  # could either be JSON or YAML
     ".prettierignore": PythonCommentStyle,
     ".pylintrc": PythonCommentStyle,
@@ -879,17 +923,21 @@ FILENAME_COMMENT_STYLE_MAP = {
     ".taprc": PythonCommentStyle,
     ".vimrc": VimCommentStyle,
     ".zshrc": PythonCommentStyle,
+    ".yamllint": PythonCommentStyle,  # is a YAML file
     ".yarnrc": PythonCommentStyle,
     "ansible.cfg": PythonCommentStyle,
     "archive.sctxar": UncommentableCommentStyle,  # SuperCollider global archive
     "cabal.project": HaskellCommentStyle,
-    "Cargo.lock": PythonCommentStyle,
+    "Cargo.lock": UncommentableCommentStyle,
     "CMakeLists.txt": PythonCommentStyle,
     "CODEOWNERS": PythonCommentStyle,
     "configure.ac": M4CommentStyle,
     "Containerfile": PythonCommentStyle,
     "Dockerfile": PythonCommentStyle,
     "Doxyfile": PythonCommentStyle,
+    "dune": SemicolonCommentStyle,  # OCaml build system
+    "dune-project": SemicolonCommentStyle,  # OCaml build system
+    "dune-workspace": SemicolonCommentStyle,  # OCaml build system
     "Earthfile": PythonCommentStyle,
     "flake.lock": UncommentableCommentStyle,  # is a JSON file
     "Gemfile": PythonCommentStyle,
@@ -901,15 +949,19 @@ FILENAME_COMMENT_STYLE_MAP = {
     "Makefile": PythonCommentStyle,
     "MANIFEST.in": PythonCommentStyle,
     "manifest": PythonCommentStyle,  # used by cdist
+    "matplotlibrc": PythonCommentStyle,
     "meson.build": PythonCommentStyle,
     "meson_options.txt": PythonCommentStyle,
     "poetry.lock": UncommentableCommentStyle,
     "pubspec.lock": UncommentableCommentStyle,
     "pylintrc": PythonCommentStyle,
+    "py.typed": PythonCommentStyle,
     "Rakefile": PythonCommentStyle,
     "requirements.txt": PythonCommentStyle,
     "ROOT": MlCommentStyle,
     "setup.cfg": PythonCommentStyle,
+    "Snakefile": PythonCommentStyle,
+    "uv.lock": UncommentableCommentStyle,
     "yarn.lock": UncommentableCommentStyle,
 }
 
@@ -918,7 +970,7 @@ FILENAME_COMMENT_STYLE_MAP_LOWERCASE = {
 }
 
 
-def _all_style_classes() -> list[Type[CommentStyle]]:
+def _all_style_classes() -> list[type[CommentStyle]]:
     """Return a list of all defined style classes, excluding the base class."""
     result = []
     for key, value in globals().items():
@@ -935,15 +987,18 @@ _result.remove(UncommentableCommentStyle)
 NAME_STYLE_MAP = {style.SHORTHAND: style for style in _result}
 
 
-def get_comment_style(path: StrPath) -> Optional[Type[CommentStyle]]:
+def get_comment_style(path: StrPath) -> type[CommentStyle] | None:
     """Return value of CommentStyle detected for *path* or None."""
     path = Path(path)
     style = FILENAME_COMMENT_STYLE_MAP_LOWERCASE.get(path.name.lower())
     if style is None:
-        style = cast(
-            Optional[Type[CommentStyle]],
-            EXTENSION_COMMENT_STYLE_MAP_LOWERCASE.get(path.suffix.lower()),
+        style = EXTENSION_COMMENT_STYLE_MAP_LOWERCASE.get(
+            "".join(path.suffixes).lower()
         )
+        if style is None:
+            style = EXTENSION_COMMENT_STYLE_MAP_LOWERCASE.get(
+                path.suffix.lower()
+            )
     return style
 
 
